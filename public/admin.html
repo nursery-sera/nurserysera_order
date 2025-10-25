@@ -23,26 +23,52 @@
     <tbody></tbody>
   </table>
 
-  <script>
+  <script type="module">
+    // ===== パスワードガード（Firebase管理ページと同方式） =====
+    (function(){
+      const pass = sessionStorage.getItem('admin-pass') || prompt('パスワードを入力してください');
+      if (pass !== 'kohakurira') {
+        alert('不正アクセス検知：トップページに戻ります');
+        location.href = '/';
+      } else {
+        sessionStorage.setItem('admin-pass', pass);
+      }
+    })();
+
+    // ===== 注文データを読み込む関数 =====
     async function loadOrders(){
-      const res = await fetch("/api/orders");
-      const data = await res.json();
-      const tbody = document.querySelector("#ordersTable tbody");
-      tbody.innerHTML = "";
-      data.forEach(row=>{
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${row.id}</td>
-          <td>${row.last_name} ${row.first_name}</td>
-          <td>${row.prefecture}${row.city}${row.address}${row.building}</td>
-          <td>${row.phone}</td>
-          <td>${row.delivery_date || "-"}</td>
-          <td>${new Date(row.created_at).toLocaleString()}</td>
-        `;
-        tbody.appendChild(tr);
-      });
+      try {
+        const res = await fetch("/api/orders");
+        if (!res.ok) {
+          throw new Error("データ取得に失敗しました");
+        }
+        const data = await res.json();
+        const tbody = document.querySelector("#ordersTable tbody");
+        tbody.innerHTML = "";
+        data.forEach(row=>{
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${row.id}</td>
+            <td>${row.last_name} ${row.first_name}</td>
+            <td>${row.prefecture}${row.city}${row.address}${row.building}</td>
+            <td>${row.phone}</td>
+            <td>${row.delivery_date || "-"}</td>
+            <td>${new Date(row.created_at).toLocaleString()}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error("読み込みエラー:", err);
+        alert("データの読み込み中にエラーが発生しました。");
+      }
     }
-    document.getElementById("csvBtn").addEventListener("click",()=>{window.location="/api/orders/csv"});
+
+    // ===== CSVボタン =====
+    document.getElementById("csvBtn").addEventListener("click", ()=>{
+      window.location = "/api/orders/csv";
+    });
+
+    // ===== ページ読み込み時に実行 =====
     loadOrders();
   </script>
 </body>
