@@ -19,16 +19,18 @@ const PORT = process.env.PORT || 3000;
 // === PostgreSQL接続設定 ===
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl:
-    process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: false }
-      : false,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
 app.use("/admin", express.static("admin"));
+
+// 空文字や未定義を NULL にするユーティリティ
+function nn(v) {
+  return (v === undefined || v === null || String(v).trim() === "") ? null : v;
+}
 
 // === テーブル存在チェック＆作成 ===
 await pool.query(`
@@ -54,9 +56,13 @@ await pool.query(`
 // === 注文データ登録 ===
 app.post("/api/orders", async (req, res) => {
   try {
-    // index.html側のpayload構造に合わせて修正
+    // index.html 側 payload 構造に準拠
     const c = req.body.customer || {};
     const d = req.body.delivery || {};
+
+    // delivery_date が '' のときは NULL にする（DATE 型対策）
+    const deliveryDate = nn(d.desired_date); // '' -> null
+    const timeSlot     = nn(d.desired_time);
 
     const q = `
       INSERT INTO orders (
@@ -67,19 +73,19 @@ app.post("/api/orders", async (req, res) => {
     `;
 
     const v = [
-      c.lastName,
-      c.firstName,
-      c.zipcode,
-      c.prefecture,
-      c.city,
-      c.address,
-      c.building,
-      c.phone,
-      c.email,
-      c.instagram,
-      d.desired_date,
-      d.desired_time,
-      req.body.note,
+      nn(c.lastName),
+      nn(c.firstName),
+      nn(c.zipcode),
+      nn(c.prefecture),
+      nn(c.city),
+      nn(c.address),
+      nn(c.building),
+      nn(c.phone),
+      nn(c.email),
+      nn(c.instagram),
+      deliveryDate,        // ← NULL になり得る
+      timeSlot,            // ← NULL になり得る
+      nn(req.body.note),
     ];
 
     await pool.query(q, v);
