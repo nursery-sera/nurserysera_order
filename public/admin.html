@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>nursery sera — 注文管理</title>
+  <style>
+    body{font-family:sans-serif;margin:40px;}
+    table{border-collapse:collapse;width:100%;}
+    th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;font-size:14px;}
+    th{background:#eee;}
+    button{margin:10px 0;padding:6px 14px;font-size:14px;cursor:pointer;}
+  </style>
+</head>
+<body>
+  <h1>注文データ一覧</h1>
+  <button id="csvBtn">CSVダウンロード</button>
+  <table id="ordersTable">
+    <thead>
+      <tr>
+        <th>ID</th><th>名前</th><th>住所</th><th>電話</th><th>希望日</th><th>登録日</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    async function loadOrders(){
+      const res = await fetch("/api/orders");
+      const data = await res.json();
+      const tbody = document.querySelector("#ordersTable tbody");
+      tbody.innerHTML = "";
+      data.forEach(row=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.id}</td>
+          <td>${row.last_name} ${row.first_name}</td>
+          <td>${row.prefecture}${row.city}${row.address}${row.building}</td>
+          <td>${row.phone}</td>
+          <td>${row.delivery_date || "-"}</td>
+          <td>${new Date(row.created_at).toLocaleString()}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+    document.getElementById("csvBtn").addEventListener("click",()=>{window.location="/api/orders/csv"});
+    loadOrders();
+  </script>
+</body>
+</html>
