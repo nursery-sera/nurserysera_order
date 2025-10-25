@@ -103,6 +103,37 @@
       .zip-btn{font-size:14px;padding:0 14px}
       .pref-list button{font-size:14px}
     }
+
+    /* ===== 追加：自作モーダルカレンダー（必要最小限） ===== */
+    .cal-overlay{
+      position:fixed; inset:0; background:rgba(0,0,0,.5);
+      display:none; align-items:center; justify-content:center;
+      z-index:99999;
+    }
+    .cal-dialog{
+      background:#fff; width:96vw; max-width:1080px; border-radius:14px;
+      box-shadow:0 14px 48px rgba(0,0,0,.35);
+      padding:24px; transform:none; /* 初回から中央に固定 */
+    }
+    .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .cal-title{font-size:38px;font-weight:700}
+    .cal-nav button{
+      font-size:32px;background:#fff;border:2px solid #ddd;padding:10px 18px;cursor:pointer;border-radius:8px
+    }
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:12px}
+    .cal-dow{font-size:20px;text-align:center;opacity:.7}
+    .cal-day{
+      height:110px; display:flex; align-items:center; justify-content:center;
+      border:2px solid #ddd; cursor:pointer; font-size:32px; user-select:none;
+      border-radius:10px;
+    }
+    .cal-day:hover{background:#f5f5f5}
+    .cal-day.disabled{opacity:.35;cursor:not-allowed;background:#fafafa}
+    .cal-actions{display:flex;gap:16px;justify-content:flex-end;margin-top:18px}
+    .cal-actions button{
+      font-size:24px;background:#fff;border:2px solid #ddd;padding:12px 20px;cursor:pointer;border-radius:8px
+    }
+    .no-scroll{overflow:hidden}
   </style>
 </head>
 <body>
@@ -117,11 +148,11 @@
   <form id="contact-form">
     <div class="row">
       <div class="form-group">
-        <input id="lastName" name="lastName" type="text" placeholder="お名前" autocomplete="family-name" required>
+        <input id="lastName" name="lastName" type="text" placeholder="姓" autocomplete="family-name" required>
         <label id="nameMasterLabel">お名前</label>
       </div>
       <div class="form-group">
-        <input id="firstName" name="firstName" type="text" placeholder="" autocomplete="given-name" required>
+        <input id="firstName" name="firstName" type="text" placeholder="名" autocomplete="given-name" required>
         <label></label>
       </div>
     </div>
@@ -174,8 +205,9 @@
 
     <!-- お届け希望日（3〜14日後のみ選択可／未選択＝最短） -->
     <div class="form-group">
-      <input type="date" id="deliveryDate" name="deliveryDate" placeholder=" ">
-      <label>お届け希望日（3〜14日後で指定可／未選択＝最短）</label>
+      <!-- ★必要最小限の変更：text + readonly + autofill抑止 -->
+      <input type="text" id="deliveryDate" name="deliveryDate" placeholder=" " readonly autocomplete="off" inputmode="none">
+      <label>お届け希望日（未選択＝最短日）</label>
     </div>
 
     <!-- ご希望配達時間（任意） -->
@@ -198,6 +230,26 @@
 
     <button type="submit" id="submitBtn" class="submit-button" aria-busy="false">送信 ></button>
   </form>
+
+  <!-- ★追加：自作モーダルカレンダー（必要最小限の新規DOM） -->
+  <div class="cal-overlay" id="calOverlay" aria-modal="true" role="dialog">
+    <div class="cal-dialog" role="document">
+      <div class="cal-head">
+        <div class="cal-title" id="calTitle">YYYY年 M月</div>
+        <div class="cal-nav">
+          <button type="button" id="calPrev" aria-label="前の月">‹</button>
+          <button type="button" id="calNext" aria-label="次の月">›</button>
+        </div>
+      </div>
+      <div class="cal-grid" id="calGrid">
+        <!-- DOW -->
+      </div>
+      <div class="cal-actions">
+        <button type="button" id="calClose">閉じる</button>
+        <button type="button" id="calClear">未選択にする</button>
+      </div>
+    </div>
+  </div>
 
 <script>
   /* ==== select / date のラベル状態（値あり→.has-value） ==== */
@@ -280,6 +332,115 @@
       help.textContent = '選べない日: ' + list.join(', ');
       el.parentElement.appendChild(help);
     }
+
+    /* ===== 追加：自作モーダルカレンダー本体 ===== */
+    const overlay = document.getElementById('calOverlay');
+    const grid = document.getElementById('calGrid');
+    const title = document.getElementById('calTitle');
+    const btnPrev = document.getElementById('calPrev');
+    const btnNext = document.getElementById('calNext');
+    const btnClose = document.getElementById('calClose');
+    const btnClear = document.getElementById('calClear');
+
+    const DOW = ['日','月','火','水','木','金','土'];
+
+    // DOW 行の描画
+    function renderDOW(){
+      grid.innerHTML = '';
+      DOW.forEach(w=>{
+        const c=document.createElement('div');
+        c.className='cal-dow';
+        c.textContent=w;
+        grid.appendChild(c);
+      });
+    }
+
+    // 現在の表示年月（min〜maxの範囲内で移動）
+    let view = new Date(minD.getFullYear(), minD.getMonth(), 1);
+
+    function clampView(){
+      const start = new Date(minD.getFullYear(), minD.getMonth(), 1);
+      const end   = new Date(maxD.getFullYear(), maxD.getMonth(), 1);
+      if(view < start) view = start;
+      if(view > end)   view = end;
+    }
+
+    function renderBody(){
+      clampView();
+      title.textContent = `${view.getFullYear()}年 ${view.getMonth()+1}月`;
+
+      // カレンダーの先頭を週頭（日曜）に揃える
+      const firstDay = new Date(view.getFullYear(), view.getMonth(), 1);
+      const startIdx = firstDay.getDay();
+      const daysInMonth = new Date(view.getFullYear(), view.getMonth()+1, 0).getDate();
+
+      // 既存のDOW行を維持して日セルを追加
+      renderDOW();
+
+      // 前空白
+      for(let i=0;i<startIdx;i++){
+        const empty = document.createElement('div');
+        grid.appendChild(empty);
+      }
+
+      // 日セル
+      for(let d=1; d<=daysInMonth; d++){
+        const cell = document.createElement('button');
+        cell.type='button';
+        cell.className='cal-day';
+        cell.textContent = String(d);
+
+        const cur = new Date(view.getFullYear(), view.getMonth(), d);
+        const ymd = toYMD(cur);
+
+        if (isDisabled(cur)){
+          cell.classList.add('disabled');
+          cell.disabled = true;
+        }else{
+          cell.addEventListener('click', ()=>{
+            el.value = ymd;
+            el.dispatchEvent(new Event('input')); // 既存のバリデーション処理に渡す
+            closeCal();
+          });
+        }
+
+        grid.appendChild(cell);
+      }
+    }
+
+    function openCal(){
+      // 初期表示は minD の月
+      view = new Date(minD.getFullYear(), minD.getMonth(), 1);
+      renderBody();
+      overlay.style.display='flex';
+      document.body.classList.add('no-scroll');
+    }
+    function closeCal(){
+      overlay.style.display='none';
+      document.body.classList.remove('no-scroll');
+    }
+
+    btnPrev.addEventListener('click', ()=>{
+      view = new Date(view.getFullYear(), view.getMonth()-1, 1);
+      renderBody();
+    });
+    btnNext.addEventListener('click', ()=>{
+      view = new Date(view.getFullYear(), view.getMonth()+1, 1);
+      renderBody();
+    });
+    btnClose.addEventListener('click', closeCal);
+    btnClear.addEventListener('click', ()=>{
+      el.value='';
+      el.classList.remove('has-value');
+      closeCal();
+    });
+    overlay.addEventListener('click', (e)=>{
+      if(e.target===overlay) closeCal();
+    });
+
+    // 入力クリックで即モーダル（ネイティブピッカーは出ない）
+    el.addEventListener('click', openCal);
+    el.addEventListener('focus', openCal);
   })();
 
   /* ====== 郵便番号 → 住所 ====== */
@@ -409,6 +570,44 @@
       }
     });
   })();
+
+/* 「お名前」クリックやフォーカスで 姓/名 の両方に placeholder を出す */
+(function(){
+  const ln = document.getElementById('lastName');
+  const fn = document.getElementById('firstName');
+  const label = document.getElementById('nameMasterLabel'); // 「お名前」
+
+  if(!ln || !fn || !label) return;
+
+  function showBothPH(){
+    ln.classList.add('ph-on');
+    fn.classList.add('ph-on');
+  }
+  function hideBothPHIfNoneFocused(){
+    // どちらの枠もフォーカスしていない時だけ消す（片方に移動した瞬間に消えないように）
+    if (document.activeElement !== ln && document.activeElement !== fn){
+      ln.classList.remove('ph-on');
+      fn.classList.remove('ph-on');
+    }
+  }
+
+  // 「お名前」ラベルを押したら両方表示＆フォーカスを姓へ
+  label.addEventListener('mousedown', (e)=>{ e.preventDefault(); showBothPH(); ln.focus(); });
+  label.addEventListener('click', (e)=>{ e.preventDefault(); showBothPH(); ln.focus(); });
+
+  // どちらかの入力に入ったら両方表示
+  ln.addEventListener('focus', showBothPH);
+  fn.addEventListener('focus', showBothPH);
+
+  // どちらの入力からも離れたら（=両方ともフォーカス無しになったら）消す
+  ln.addEventListener('blur', ()=> setTimeout(hideBothPHIfNoneFocused, 0));
+  fn.addEventListener('blur', ()=> setTimeout(hideBothPHIfNoneFocused, 0));
+
+  // 入力が始まったら確実に表示（好みで）
+  ln.addEventListener('input', showBothPH);
+  fn.addEventListener('input', showBothPH);
+})();
+
 </script>
 </body>
 </html>
