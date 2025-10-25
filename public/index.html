@@ -104,7 +104,7 @@
       .pref-list button{font-size:14px}
     }
 
-    /* ===== 追加：自作モーダルカレンダー（必要最小限） ===== */
+    /* ===== モーダルカレンダー ===== */
     .cal-overlay{
       position:fixed; inset:0; background:rgba(0,0,0,.5);
       display:none; align-items:center; justify-content:center;
@@ -113,7 +113,7 @@
     .cal-dialog{
       background:#fff; width:96vw; max-width:1080px; border-radius:14px;
       box-shadow:0 14px 48px rgba(0,0,0,.35);
-      padding:24px; transform:none; /* 初回から中央に固定 */
+      padding:24px; transform:none;
     }
     .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
     .cal-title{font-size:38px;font-weight:700}
@@ -137,7 +137,6 @@
   </style>
 </head>
 <body>
-  <!-- 上部に固定配置（スクロールで流れる）／線なし -->
   <div class="header-bar" id="titleBar" aria-label="nursery sera">
     <div class="main-title">nursery sera</div>
   </div>
@@ -156,8 +155,6 @@
         <label></label>
       </div>
     </div>
-
-    <!-- フリガナ欄は削除 -->
 
     <div class="form-group">
       <input type="text" id="zipcode" name="zipcode" placeholder="例:1234567(ハイフンなし)" maxlength="7" required>
@@ -191,26 +188,22 @@
       <label>電話番号（ハイフンなし）</label>
     </div>
 
-    <!-- メール：任意 -->
+    <!-- 任意 -->
     <div class="form-group">
       <input type="email" id="email" name="email" placeholder=" " autocomplete="email">
       <label>連絡用メールアドレス（任意）</label>
     </div>
 
-    <!-- Instagramアカウント名（任意） -->
     <div class="form-group">
       <input type="text" id="instagram" name="instagram" placeholder=" ">
       <label>Instagramからご注文の方:アカウント名</label>
     </div>
 
-    <!-- お届け希望日（3〜14日後のみ選択可／未選択＝最短） -->
     <div class="form-group">
-      <!-- ★必要最小限の変更：text + readonly + autofill抑止 -->
       <input type="text" id="deliveryDate" name="deliveryDate" placeholder=" " readonly autocomplete="off" inputmode="none">
       <label>お届け希望日（未選択＝最短日）</label>
     </div>
 
-    <!-- ご希望配達時間（任意） -->
     <div class="form-group">
       <select id="timeSlot" name="timeSlot">
         <option value="" selected hidden></option>
@@ -231,7 +224,7 @@
     <button type="submit" id="submitBtn" class="submit-button" aria-busy="false">送信 ></button>
   </form>
 
-  <!-- ★追加：自作モーダルカレンダー（必要最小限の新規DOM） -->
+  <!-- モーダルカレンダー -->
   <div class="cal-overlay" id="calOverlay" aria-modal="true" role="dialog">
     <div class="cal-dialog" role="document">
       <div class="cal-head">
@@ -241,9 +234,7 @@
           <button type="button" id="calNext" aria-label="次の月">›</button>
         </div>
       </div>
-      <div class="cal-grid" id="calGrid">
-        <!-- DOW -->
-      </div>
+      <div class="cal-grid" id="calGrid"></div>
       <div class="cal-actions">
         <button type="button" id="calClose">閉じる</button>
         <button type="button" id="calClear">未選択にする</button>
@@ -270,14 +261,8 @@
     const el = document.getElementById('deliveryDate');
     if(!el) return;
 
-    // ▼ここに選べない特定日を列挙（例）
-    const BLACKOUTS = [
-      // '2025-01-01','2025-01-02'
-    ];
-    // ▼週次店休日（0=日 … 6=土）。例：日曜休みなら [0]
-    const WEEKLY_CLOSED = [
-      // 0
-    ];
+    const BLACKOUTS = [ /* '2025-01-01' など */ ];
+    const WEEKLY_CLOSED = [ /* 0=日曜 … 6=土曜 */ ];
 
     const toYMD = (d)=>[
       d.getFullYear(),
@@ -297,7 +282,6 @@
     function isOutOfRange(d){ return d < minD || d > maxD; }
     function isDisabled(d){ return isOutOfRange(d) || isWeeklyClosed(d) || isBlackout(d); }
 
-    // ピッカーで選ばれても無効日なら即リセット
     el.addEventListener('input', ()=>{
       if (!el.value) return;
       const d = new Date(el.value+'T00:00:00');
@@ -316,7 +300,6 @@
       }
     });
 
-    // 補助表示：範囲内の「選べない日」一覧を下に表示
     const help = document.createElement('div');
     help.style.fontSize = '14px';
     help.style.color = '#888';
@@ -333,7 +316,7 @@
       el.parentElement.appendChild(help);
     }
 
-    /* ===== 追加：自作モーダルカレンダー本体 ===== */
+    /* ===== モーダルカレンダー本体 ===== */
     const overlay = document.getElementById('calOverlay');
     const grid = document.getElementById('calGrid');
     const title = document.getElementById('calTitle');
@@ -344,7 +327,6 @@
 
     const DOW = ['日','月','火','水','木','金','土'];
 
-    // DOW 行の描画
     function renderDOW(){
       grid.innerHTML = '';
       DOW.forEach(w=>{
@@ -355,7 +337,6 @@
       });
     }
 
-    // 現在の表示年月（min〜maxの範囲内で移動）
     let view = new Date(minD.getFullYear(), minD.getMonth(), 1);
 
     function clampView(){
@@ -369,21 +350,17 @@
       clampView();
       title.textContent = `${view.getFullYear()}年 ${view.getMonth()+1}月`;
 
-      // カレンダーの先頭を週頭（日曜）に揃える
       const firstDay = new Date(view.getFullYear(), view.getMonth(), 1);
       const startIdx = firstDay.getDay();
       const daysInMonth = new Date(view.getFullYear(), view.getMonth()+1, 0).getDate();
 
-      // 既存のDOW行を維持して日セルを追加
       renderDOW();
 
-      // 前空白
       for(let i=0;i<startIdx;i++){
         const empty = document.createElement('div');
         grid.appendChild(empty);
       }
 
-      // 日セル
       for(let d=1; d<=daysInMonth; d++){
         const cell = document.createElement('button');
         cell.type='button';
@@ -399,7 +376,7 @@
         }else{
           cell.addEventListener('click', ()=>{
             el.value = ymd;
-            el.dispatchEvent(new Event('input')); // 既存のバリデーション処理に渡す
+            el.dispatchEvent(new Event('input'));
             closeCal();
           });
         }
@@ -409,7 +386,6 @@
     }
 
     function openCal(){
-      // 初期表示は minD の月
       view = new Date(minD.getFullYear(), minD.getMonth(), 1);
       renderBody();
       overlay.style.display='flex';
@@ -420,25 +396,12 @@
       document.body.classList.remove('no-scroll');
     }
 
-    btnPrev.addEventListener('click', ()=>{
-      view = new Date(view.getFullYear(), view.getMonth()-1, 1);
-      renderBody();
-    });
-    btnNext.addEventListener('click', ()=>{
-      view = new Date(view.getFullYear(), view.getMonth()+1, 1);
-      renderBody();
-    });
+    btnPrev.addEventListener('click', ()=>{ view = new Date(view.getFullYear(), view.getMonth()-1, 1); renderBody(); });
+    btnNext.addEventListener('click', ()=>{ view = new Date(view.getFullYear(), view.getMonth()+1, 1); renderBody(); });
     btnClose.addEventListener('click', closeCal);
-    btnClear.addEventListener('click', ()=>{
-      el.value='';
-      el.classList.remove('has-value');
-      closeCal();
-    });
-    overlay.addEventListener('click', (e)=>{
-      if(e.target===overlay) closeCal();
-    });
+    btnClear.addEventListener('click', ()=>{ el.value=''; el.classList.remove('has-value'); closeCal(); });
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) closeCal(); });
 
-    // 入力クリックで即モーダル（ネイティブピッカーは出ない）
     el.addEventListener('click', openCal);
     el.addEventListener('focus', openCal);
   })();
@@ -466,6 +429,7 @@
             var city=document.getElementById('city');
             var addr=document.getElementById('address');
             if(city) city.value=(r.address2||'');
+            ifaddr = document.getElementById('address');
             if(addr) addr.value=(r.address3||'');
           })
           .catch(function(){ alert('検索エラー'); });
@@ -492,7 +456,6 @@
   (function(){
     const API=(window.API_BASE||'')+'/orders';
     let submitting=false;
-    function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
     async function postJsonWithTimeout(url,body,{timeoutMs=20000}={}){
       const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(new Error('timeout')),timeoutMs);
       try{
@@ -504,19 +467,18 @@
 
     var form=document.getElementById('contact-form'); if(!form) return;
     const submitBtn=document.getElementById('submitBtn');
-    submitBtn?.addEventListener('click',e=>{ if(submitBtn.getAttribute('aria-busy')==='true') e.preventDefault(); });
 
     form.addEventListener('submit',async function(e){
       e.preventDefault(); if(submitting) return; submitting=true;
-      const fd=new FormData(form);
 
-      if(submitBtn){ submitBtn.textContent='送信中…'; submitBtn.setAttribute('aria-busy','true'); submitBtn.disabled=true; }
-      const disabledEls=[]; form.querySelectorAll('input,textarea,button,select').forEach(el=>{ if(!el.disabled){ el.disabled=true; disabledEls.push(el);} });
+      const fd=new FormData(form);
+      submitBtn.textContent='送信中…';
+      submitBtn.setAttribute('aria-busy','true');
+      submitBtn.disabled=true;
 
       const emailRaw=sanitize(fd.get('email'));
-      const emailOk=!emailRaw || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw); // 任意：空はOK
-
-      const deliveryDateRaw=sanitize(fd.get('deliveryDate')); const deliveryDate=deliveryDateRaw||''; // ''=最短
+      const emailOk=!emailRaw || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw);
+      if(!emailOk){ alert('メールアドレスの形式が正しくありません'); return cleanup(); }
 
       const customer={
         lastName:sanitize(fd.get('lastName')), firstName:sanitize(fd.get('firstName')),
@@ -527,87 +489,65 @@
         name:(sanitize(fd.get('lastName'))+' '+sanitize(fd.get('firstName'))).trim(),
         addressFull:(sanitize(fd.get('prefecture'))+sanitize(fd.get('city'))+sanitize(fd.get('address'))+sanitize(fd.get('building'))).trim()
       };
+      if(!customer.lastName||!customer.firstName){ alert('お名前（姓・名）を入力してください'); return cleanup(); }
 
-      if(!emailOk){ alert('メールアドレスの形式が正しくありません'); cleanup(); return; }
-      if(!customer.lastName||!customer.firstName){ alert('お名前（姓・名）を入力してください'); cleanup(); return; }
-
-      const cart=JSON.parse(localStorage.getItem('cart')||'[]');
-      const items=cart.map(it=>{
-        const raw=it.productId??it.id??null; const numericId=/^\d+$/.test(String(raw))?Number(raw):null;
-        return { productId:numericId, productName:String(it.productName??it.variety??it.name??''), unitPrice:Number(it.price||0), quantity:Number(it.quantity||1), productSlug:String(raw||''), image:(it.image||'').split('?')[0].slice(0,512), category:String(it.category||''), variety:String(it.variety||'') };
-      });
-
-      const checkout=JSON.parse(localStorage.getItem('checkout')||'null');
-      const subtotal=items.reduce((s,it)=>s+it.unitPrice*it.quantity,0);
-      const shipping=Number(checkout?.shippingCost??0);
-      const shippingOptionText=String(checkout?.shippingName||'');
-      const paymentMethod=(checkout&&checkout.paymentMethod)||'bank_transfer';
-      const total=Number(checkout?.total??(subtotal+shipping));
+      const deliveryDateRaw=sanitize(fd.get('deliveryDate'));
+      const timeSlotRaw=sanitize(fd.get('timeSlot'));
 
       const payload={
-        customer, note:sanitize(fd.get('memo')), items,
-        summary:{ subtotal, shipping, shippingOptionText, total, paymentMethod },
-        delivery:{ desired_date:deliveryDate, desired_time:sanitize(fd.get('timeSlot')) }
+        customer,
+        note:sanitize(fd.get('memo')),
+        summary:{ subtotal:0, shipping:0, shippingOptionText:'', total:0, paymentMethod:'bank_transfer' },
+        delivery:{ desired_date:deliveryDateRaw||'', desired_time:timeSlotRaw||'' }
       };
 
       try{
         let r=await postJsonWithTimeout(API,payload,{timeoutMs:20000});
-        if((!r.ok&&[502,504].includes(r.status))||(r.data&&r.data.code===502)){ await sleep(1200); r=await postJsonWithTimeout(API,payload,{timeoutMs:20000}); }
-        if(!r.ok){ const msg=r.data?.message||r.data?.error||r.data?.raw||'サーバーエラー'; const reqId=r.data?.request_id?`\nrequest_id: ${r.data.request_id}`:''; throw new Error(`HTTP ${r.status}: ${msg}${reqId}`); }
-        window.__orderSubmitSucceeded__=true;
-        alert('送信が完了しました。ご注文ありがとうございます。');  // 自動返信の案内は削除
-        localStorage.removeItem('cart'); localStorage.removeItem('checkout'); e.target.reset();
+        if(!r.ok){
+          const msg=r.data?.message||r.data?.error||r.data?.raw||'サーバーエラー';
+          const reqId=r.data?.request_id?`\nrequest_id: ${r.data.request_id}`:'';
+          throw new Error(`HTTP ${r.status}: ${msg}${reqId}`);
+        }
+        alert('送信が完了しました。ご注文ありがとうございます。');
+        e.target.reset();
         document.getElementById('timeSlot')?.classList.remove('has-value');
         document.getElementById('deliveryDate')?.classList.remove('has-value');
       }catch(err){
-        alert(`エラー：${err.message}\n\n送信先: ${API}`); console.error('order error',err);
+        alert(`エラー：${err.message}\n\n送信先: ${API}`);
+        console.error('order error',err);
       }finally{ cleanup(); }
 
       function cleanup(){
-        if(submitBtn){ submitBtn.textContent='送信 >'; submitBtn.setAttribute('aria-busy','false'); submitBtn.disabled=false; }
-        form.querySelectorAll('input,textarea,button,select').forEach(el=>{ el.disabled=false; });
-        if(!window.__orderSubmitSucceeded__) submitting=false;
+        submitBtn.textContent='送信 >';
+        submitBtn.setAttribute('aria-busy','false');
+        submitBtn.disabled=false;
+        submitting=false;
       }
     });
   })();
 
-/* 「お名前」クリックやフォーカスで 姓/名 の両方に placeholder を出す */
-(function(){
-  const ln = document.getElementById('lastName');
-  const fn = document.getElementById('firstName');
-  const label = document.getElementById('nameMasterLabel'); // 「お名前」
+  /* 「お名前」クリックで 姓/名 の両方に placeholder を出す */
+  (function(){
+    const ln = document.getElementById('lastName');
+    const fn = document.getElementById('firstName');
+    const label = document.getElementById('nameMasterLabel');
+    if(!ln || !fn || !label) return;
 
-  if(!ln || !fn || !label) return;
-
-  function showBothPH(){
-    ln.classList.add('ph-on');
-    fn.classList.add('ph-on');
-  }
-  function hideBothPHIfNoneFocused(){
-    // どちらの枠もフォーカスしていない時だけ消す（片方に移動した瞬間に消えないように）
-    if (document.activeElement !== ln && document.activeElement !== fn){
-      ln.classList.remove('ph-on');
-      fn.classList.remove('ph-on');
+    function showBothPH(){ ln.classList.add('ph-on'); fn.classList.add('ph-on'); }
+    function hideBothPHIfNoneFocused(){
+      if (document.activeElement !== ln && document.activeElement !== fn){
+        ln.classList.remove('ph-on'); fn.classList.remove('ph-on');
+      }
     }
-  }
-
-  // 「お名前」ラベルを押したら両方表示＆フォーカスを姓へ
-  label.addEventListener('mousedown', (e)=>{ e.preventDefault(); showBothPH(); ln.focus(); });
-  label.addEventListener('click', (e)=>{ e.preventDefault(); showBothPH(); ln.focus(); });
-
-  // どちらかの入力に入ったら両方表示
-  ln.addEventListener('focus', showBothPH);
-  fn.addEventListener('focus', showBothPH);
-
-  // どちらの入力からも離れたら（=両方ともフォーカス無しになったら）消す
-  ln.addEventListener('blur', ()=> setTimeout(hideBothPHIfNoneFocused, 0));
-  fn.addEventListener('blur', ()=> setTimeout(hideBothPHIfNoneFocused, 0));
-
-  // 入力が始まったら確実に表示（好みで）
-  ln.addEventListener('input', showBothPH);
-  fn.addEventListener('input', showBothPH);
-})();
-
+    label.addEventListener('mousedown', (e)=>{ e.preventDefault(); showBothPH(); ln.focus(); });
+    label.addEventListener('click', (e)=>{ e.preventDefault(); showBothPH(); ln.focus(); });
+    ln.addEventListener('focus', showBothPH);
+    fn.addEventListener('focus', showBothPH);
+    ln.addEventListener('blur', ()=> setTimeout(hideBothPHIfNoneFocused, 0));
+    fn.addEventListener('blur', ()=> setTimeout(hideBothPHIfNoneFocused, 0));
+    ln.addEventListener('input', showBothPH);
+    fn.addEventListener('input', showBothPH);
+  })();
 </script>
 </body>
 </html>
