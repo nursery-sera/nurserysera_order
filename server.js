@@ -145,10 +145,10 @@ app.get("/api/orders/csv", async (req, res) => {
     });
 
     const sender = {
-      phone: "09000000000",
-      zip: "1234567",
-      addr: "大阪府大阪市中央区○○1-2-3",
-      name: "nursery sera",
+      phone: "09067309120",
+      zip: "5798023",
+      addr: "大阪府東大阪市立花町14-4",
+      name: "NURSERY SERA",
     };
 
     const records = rows.map((r, i) => ({
