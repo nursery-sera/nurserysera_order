@@ -9,17 +9,41 @@
     th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;font-size:14px;vertical-align:top;}
     th{background:#eee;}
     button{margin:10px 0;padding:6px 14px;font-size:14px;cursor:pointer;}
-    .controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0 16px;}
+    .controls{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin:8px 0 16px;}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
     .cols-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 14px;margin-top:8px;max-height:260px;overflow:auto;padding:8px;border:1px solid #ddd;border-radius:6px;background:#fafafa;}
     .muted{color:#666;font-size:12px;}
+    .ship-preview{font-weight:bold;}
+    input[type="text"]{padding:6px 8px;font-size:14px;}
   </style>
 </head>
 <body>
   <h1>注文データ一覧</h1>
 
   <div class="controls">
-    <button id="csvSelectedBtn">選択行をCSVダウンロード</button>
-    <span class="muted">※「発送種別」は行ごとに選べます（A=ネコポス / 0=発払い）。</span>
+    <!-- 1行目：選択行CSV + 右側ツール群 -->
+    <div class="row">
+      <button id="csvSelectedBtn">選択行をCSVダウンロード</button>
+    </div>
+    <div class="row">
+      <button id="toNekoposBtn">選択行をネコポスに変換</button>
+
+      <!-- 出荷予定日：年ボタン + MMDD入力 + プレビュー -->
+      <button id="shipYearBtn" title="クリックで年を変更">2025</button>
+      <label>
+        出荷予定日(MMDD)：<input type="text" id="shipMmdd" placeholder="例: 1225" maxlength="4" inputmode="numeric" pattern="[0-9]*">
+      </label>
+      <span>→ <span id="shipPreview" class="ship-preview">未設定</span></span>
+    </div>
+
+    <!-- 2行目：一括CSV（選択行ボタンの下） -->
+    <div class="row">
+      <button id="csvAllBtn">一括CSVダウンロード</button>
+    </div>
+    <div class="row">
+      <button id="toHatsubaraiBtn">選択行を発払いに変換</button>
+      <span class="muted">※発送種別: A=ネコポス / 0=発払い。出荷予定日を設定するとCSVにYYYY/MM/DDで出力します。</span>
+    </div>
   </div>
 
   <details id="colPicker">
@@ -40,6 +64,7 @@
         <th>電話</th>
         <th>配達希望日</th>
         <th>配達希望時間</th>
+        <th>出荷予定日</th>
         <th>登録日</th>
         <th>発送種別<br><span class="muted">A=ネコポス / 0=発払い</span></th>
       </tr>
@@ -48,7 +73,7 @@
   </table>
 
   <script type="module">
-    // ===== パスワードガード（既存のまま） =====
+    // ===== パスワードガード =====
     (function(){
       const pass = sessionStorage.getItem('admin-pass') || prompt('パスワードを入力してください');
       if (pass !== 'kohakurira') {
@@ -62,12 +87,40 @@
     // ===== グローバル =====
     let ORDERS = [];
     let CSV_HEADERS = [];
+    let shipYear = new Date().getFullYear(); // 今年を初期値
+    let shipMmdd = "";                       // "MMDD" 4桁（例: "1225"）
 
-    // ===== サーバ定義CSVヘッダを取得してチェック群を作成 =====
+    // ===== 出荷予定日ユーティリティ =====
+    function mmddToYmd(year, mmdd){
+      const m = (mmdd || "").trim();
+      if (!/^\d{4}$/.test(m)) return "";
+      const mm = m.slice(0,2);
+      const dd = m.slice(2,4);
+      const dt = new Date(`${year}/${mm}/${dd}`);
+      if (isNaN(dt.getTime())) return "";
+      const y = dt.getFullYear();
+      const M = String(dt.getMonth()+1).padStart(2,"0");
+      const D = String(dt.getDate()).padStart(2,"0");
+      return `${y}/${M}/${D}`; // ヤマト向け
+    }
+    function getShipDateYmd(){
+      return mmddToYmd(shipYear, shipMmdd);
+    }
+    function refreshShipPreview(){
+      document.getElementById('shipYearBtn').textContent = String(shipYear);
+      const ymd = getShipDateYmd();
+      document.getElementById('shipPreview').textContent = ymd || "未設定";
+      // テーブルの「出荷予定日」列を一括更新（見やすさ用）
+      document.querySelectorAll('td[data-col="ship"]').forEach(td=>{
+        td.textContent = ymd || "-";
+      });
+    }
+
+    // ===== CSVヘッダ取得 =====
     async function loadCsvHeaders() {
       const res = await fetch('/api/orders/csv/headers');
       if (!res.ok) throw new Error('CSVヘッダ取得に失敗');
-      CSV_HEADERS = await res.json(); // [{id,title},...]
+      CSV_HEADERS = await res.json();
       const box = document.querySelector('#colsContainer');
       box.innerHTML = '';
       CSV_HEADERS.forEach(h => {
@@ -82,7 +135,7 @@
       });
     }
 
-    // ===== 注文データを読み込む =====
+    // ===== 注文データ =====
     async function loadOrders(){
       const res = await fetch("/api/orders");
       if (!res.ok) throw new Error("データ取得に失敗しました");
@@ -104,6 +157,7 @@
           <td>${row.phone || ''}</td>
           <td>${deliveryDate}</td>
           <td>${timeSlot}</td>
+          <td data-col="ship">-</td>
           <td>${created}</td>
           <td>
             <select class="ship-type" data-id="${row.id}">
@@ -116,11 +170,13 @@
       });
 
       // 全選択
-      const all = document.getElementById('checkAllRows');
-      all.addEventListener('change', e=>{
+      document.getElementById('checkAllRows').addEventListener('change', e=>{
         const checked = e.target.checked;
         document.querySelectorAll('.row-check').forEach(cb => cb.checked = checked);
       });
+
+      // 出荷予定日プレビューを反映
+      refreshShipPreview();
     }
 
     // 選択中のCSV項目ID配列
@@ -141,30 +197,55 @@
       return Array.from(checkedIds).map(id => ({ id, slip_type: mapShip[id] || "0" }));
     }
 
-    // ===== CSV: 選択行のみ、選択項目のみ、行ごとの発送種別で出力 =====
+    // ===== 変換ボタン：ネコポス / 発払い =====
+    function setSelectedShipType(to){
+      const ids = new Set(
+        Array.from(document.querySelectorAll('.row-check:checked')).map(cb => Number(cb.dataset.id))
+      );
+      if (ids.size === 0){
+        alert('対象行をチェックしてください。');
+        return;
+      }
+      document.querySelectorAll('.ship-type').forEach(sel=>{
+        const id = Number(sel.dataset.id);
+        if (ids.has(id)) sel.value = to; // "A" or "0"
+      });
+    }
+    document.getElementById('toNekoposBtn').addEventListener('click', ()=> setSelectedShipType('A'));
+    document.getElementById('toHatsubaraiBtn').addEventListener('click', ()=> setSelectedShipType('0'));
+
+    // ===== 出荷予定日：年ボタン & MMDD入力 =====
+    document.getElementById('shipYearBtn').addEventListener('click', ()=>{
+      const y = prompt('出荷予定年を4桁で入力してください', String(shipYear));
+      if (!y) return;
+      if (!/^\d{4}$/.test(y)) { alert('4桁の年を入力してください'); return; }
+      shipYear = Number(y);
+      refreshShipPreview();
+    });
+    document.getElementById('shipMmdd').addEventListener('input', (e)=>{
+      shipMmdd = e.target.value.replace(/\D/g,'').slice(0,4);
+      e.target.value = shipMmdd;
+      refreshShipPreview();
+    });
+
+    // ===== CSV: 選択行 =====
     async function downloadSelectedCsv() {
       const selections = getSelections();
-      if (selections.length === 0) {
-        alert("CSVにする行をチェックしてください。");
-        return;
-      }
+      if (selections.length === 0) { alert("CSVにする行をチェックしてください。"); return; }
       const columns = getSelectedColumnIds();
-      if (columns.length === 0) {
-        alert("CSV項目を1つ以上選んでください。");
-        return;
-      }
+      if (columns.length === 0) { alert("CSV項目を1つ以上選んでください。"); return; }
 
+      const shipDate = getShipDateYmd(); // "YYYY/MM/DD" or ""
       try {
         const res = await fetch('/api/orders/csv', {
           method: 'POST',
           headers: { 'Content-Type':'application/json' },
-          body: JSON.stringify({ selections, columns })
+          body: JSON.stringify({ selections, columns, ship_date: shipDate })
         });
         if (!res.ok) {
           const e = await res.json().catch(()=>({}));
           throw new Error(e.detail || 'CSV生成に失敗しました');
         }
-        // Blob受け取り → ダウンロード
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -179,14 +260,38 @@
         alert('CSV作成中にエラー: ' + err.message);
       }
     }
-
     document.getElementById("csvSelectedBtn").addEventListener("click", downloadSelectedCsv);
 
-    // 初期表示
+    // ===== CSV: 一括（全件） =====
+    async function downloadAllCsv(){
+      const shipDate = encodeURIComponent(getShipDateYmd() || "");
+      const url = shipDate ? `/api/orders/csv?ship_date=${shipDate}` : `/api/orders/csv`;
+      try{
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('CSV生成に失敗しました');
+        const blob = await res.blob();
+        const link = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = link;
+        a.download = 'orders_b2.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(link);
+      }catch(e){
+        console.error(e);
+        alert('CSV作成中にエラー: ' + e.message);
+      }
+    }
+    document.getElementById('csvAllBtn').addEventListener('click', downloadAllCsv);
+
+    // ===== 初期表示 =====
     (async ()=>{
       try {
         await loadCsvHeaders();
         await loadOrders();
+        // 初期プレビュー
+        refreshShipPreview();
       } catch (e) {
         console.error("初期化エラー:", e);
         alert("初期化中にエラーが発生しました。");
