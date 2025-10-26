@@ -23,7 +23,7 @@
     .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
 
     .cols-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 14px;margin-top:8px;max-height:260px;overflow:auto;padding:8px;border:1px solid #ddd;border-radius:6px;background:#fafafa;}
-    .muted{color:#666;font-size:14px;white-space:pre-line;} /* 説明を2行表示 */
+    .muted{color:#666;font-size:14px;white-space:pre-line;} /* 説明を2行表示（ヘッダーでは使わない） */
 
     .ship-preview{font-weight:bold;}
 
@@ -78,7 +78,7 @@
   <table id="ordersTable">
     <thead>
       <tr>
-        <!-- ヘッダーの“一括チェック”だけ削除。他はそのまま -->
+        <!-- ヘッダーの“一括チェック”だけ削除。他はそのまま（★ヘッダーは改行なし・横並び） -->
         <th>選択</th>
         <th>ID</th>
         <th>名前</th>
@@ -88,8 +88,7 @@
         <th>配達希望時間</th>
         <th>出荷予定日</th>
         <th>登録日</th>
-        <th>発送種別<br><span class="muted">A=ネコポス
-0=発払い</span></th>
+        <th>発送種別</th> <!-- ★説明テキストはヘッダーから外し、上部の2行説明のみ使用 -->
       </tr>
     </thead>
     <tbody></tbody>
@@ -109,27 +108,37 @@
     let shipYear = new Date().getFullYear(); // 今年
     let shipMmdd = "";                       // "MMDD" 例: "1225"
 
-    // ===== 整形ユーティリティ（セルは innerHTML で <br> を使う！） =====
+    // ===== 整形ユーティリティ（セルは innerHTML で <br> を使う） =====
     const onlyDigits = s => (s||"").replace(/\D/g,"");
 
-    // 5文字ごとに <br> を挿入
-    function brEveryN(str, n=5){
+    // ★5文字を超える場合のみ5文字ごとに <br> を入れる
+    function brIfLongEveryN(str, n=5){
       const s = String(str||"");
       if (!s) return "";
-      const chunks = [];
-      for (let i=0; i<s.length; i+=n) chunks.push(s.slice(i, i+n));
-      return chunks.join("<br>");
+      if (s.length <= n) return s;     // 5文字以下は改行しない
+      const parts = [];
+      for (let i=0; i<s.length; i+=n) parts.push(s.slice(i, i+n));
+      return parts.join("<br>");
     }
 
-    // 住所：都道府県 / 市区町村 / 番地 / 建物名 で改行 + 各要素5文字ごとに改行
+    // ★名前：姓 改行 名（横書き）
+    function formatName(last, first){
+      const l = (last||"").trim();
+      const f = (first||"").trim();
+      if (!l && !f) return "-";
+      return `${l || ""}<br>${f || ""}`;
+    }
+
+    // ★住所：4段（都道府県 / 市区町村 / 番地 / 建物名）
+    // 各段は5文字以下ならそのまま、6文字以上なら5文字ごとに強制改行
     function formatAddress(pref, city, addr, bld){
       return [pref, city, addr, bld]
-        .map(part => brEveryN(part, 5))
-        .filter(Boolean)
+        .map(part => brIfLongEveryN(part, 5))
+        .filter(p => p && p !== "null")
         .join("<br>");
     }
 
-    // 電話：3 / 4 / 4 の3行に
+    // 電話：3 / 4 / 4 の3行
     function formatPhone(phone){
       const d = onlyDigits(phone);
       if (!d) return "-";
@@ -200,7 +209,7 @@
       });
     }
 
-    // ===== 注文データ（レイアウトはそのまま、表示だけをコンパクトに） =====
+    // ===== 注文データ（レイアウトはそのまま、表示だけを整形） =====
     async function loadOrders(){
       const res = await fetch("/api/orders");
       if (!res.ok) throw new Error("データ取得に失敗しました");
@@ -211,7 +220,7 @@
       ORDERS.forEach(row=>{
         const tr = document.createElement("tr");
 
-        const fullName = `${row.last_name || ''} ${row.first_name || ''}`.trim() || "-";
+        const nameHtml = formatName(row.last_name, row.first_name);
         const addrHtml = formatAddress(row.prefecture||'', row.city||'', row.address||'', row.building||'') || "-";
         const phoneHtml = formatPhone(row.phone||'') || "-";
         const delivHtml = row.delivery_date ? toYAndMdHtml(row.delivery_date) : "-";
@@ -221,8 +230,8 @@
         tr.innerHTML = `
           <td class="center"><input type="checkbox" class="row-check" data-id="${row.id}"></td>
           <td class="center">${row.id}</td>
-          <td class="center">${fullName}</td>
-          <td class="">${addrHtml}</td>
+          <td class="center">${nameHtml}</td>
+          <td>${addrHtml}</td>
           <td class="center">${phoneHtml}</td>
           <td class="center">${delivHtml}</td>
           <td class="center">${timeHtml}</td>
@@ -238,7 +247,6 @@
         tbody.appendChild(tr);
       });
 
-      // ヘッダーの一括チェック(#checkAllRows)はHTMLから削除しているのでJSも追加不要
       refreshShipPreview();
     }
 
