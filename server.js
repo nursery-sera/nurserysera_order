@@ -69,7 +69,6 @@ function normalizeTimeSlot(input){
 // "YYYY/MM/DD" に統一
 function formatDateYYYYMMDD(d){
   if (!d) return "";
-  // "YYYY/MM/DD" or "YYYY-MM-DD" どちらでもOKにする
   const s = String(d).replaceAll("-", "/");
   const dt = new Date(s);
   if (isNaN(dt.getTime())) return "";
@@ -82,10 +81,10 @@ function formatDateYYYYMMDD(d){
 // === CSVヘッダ定義 ===
 const CSV_HEADER_MASTER = [
   { id: "manage_no",         title: "お客様管理番号" },
-  { id: "slip_type",         title: "送り状種類" },         // 0=宅急便(発払い), A=ネコポス
+  { id: "slip_type",         title: "送り状種類" },
   { id: "cool_type",         title: "クール区分" },
   { id: "den_no",            title: "伝票番号" },
-  { id: "ship_date",         title: "出荷予定日" },         // ← 今回UIの値を入れる
+  { id: "ship_date",         title: "出荷予定日" },
   { id: "delivery_date",     title: "お届け予定日" },
   { id: "time_slot",         title: "お届け時間帯" },
   { id: "dest_phone",        title: "お届け先電話番号" },
@@ -100,12 +99,10 @@ const CSV_HEADER_MASTER = [
   { id: "item_name1",        title: "品名1" },
   { id: "qty",               title: "出荷個数" },
   { id: "note",              title: "記事" },
-  // ご依頼主
   { id: "consignor_phone",   title: "ご依頼主電話番号" },
   { id: "consignor_zip",     title: "ご依頼主郵便番号" },
   { id: "consignor_addr",    title: "ご依頼主住所" },
   { id: "consignor_name",    title: "ご依頼主名" },
-  // 請求・管理
   { id: "bill_customer_code",title: "ご請求先顧客コード" },
   { id: "freight_mgmt_no",   title: "運賃管理番号" },
 ];
@@ -133,7 +130,6 @@ await pool.query(`
 
 // === API ===
 
-// 新規登録（既存）
 app.post("/api/orders", async (req, res) => {
   try {
     const c = req.body.customer || {};
@@ -161,7 +157,6 @@ app.post("/api/orders", async (req, res) => {
   }
 });
 
-// 一覧
 app.get("/api/orders", async (_req, res) => {
   try {
     const result = await pool.query("SELECT * FROM orders ORDER BY created_at DESC");
@@ -172,13 +167,10 @@ app.get("/api/orders", async (_req, res) => {
   }
 });
 
-// CSVヘッダ
 app.get("/api/orders/csv/headers", (_req, res) => {
   res.json(CSV_HEADER_MASTER);
 });
 
-// 一括CSV（GET）— ship_date クエリ対応
-// 例: /api/orders/csv?ship_date=2025/12/25  または 2025-12-25
 app.get("/api/orders/csv", async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM orders ORDER BY created_at DESC");
@@ -193,8 +185,6 @@ app.get("/api/orders/csv", async (req, res) => {
   }
 });
 
-// 選択行CSV（POST）— ship_date 受け取り対応
-// body: { selections:[{id,slip_type}], columns:[id,...], ship_date:"YYYY/MM/DD" or "YYYY-MM-DD" }
 app.post("/api/orders/csv", async (req, res) => {
   try {
     const selections = Array.isArray(req.body?.selections) ? req.body.selections : [];
@@ -230,7 +220,7 @@ app.post("/api/orders/csv", async (req, res) => {
 });
 
 // === CSV生成 ===
-async function buildCsvBuffer(rows, selectedCols /* null=全列 */, slipMap /* null */, shipDate /* "YYYY/MM/DD" or "" */){
+async function buildCsvBuffer(rows, selectedCols, slipMap, shipDate){
   const headers = (selectedCols && selectedCols.length)
     ? CSV_HEADER_MASTER.filter(h => selectedCols.includes(h.id))
     : CSV_HEADER_MASTER.slice();
@@ -251,15 +241,18 @@ async function buildCsvBuffer(rows, selectedCols /* null=全列 */, slipMap /* n
     const destAddr1 = joinSafe([r.prefecture, r.city, r.address], "");
     const destAddr2 = nn(r.building) || "";
     const slipType  = slipMap?.get(Number(r.id)) ?? "0";
-    const delivery  = formatDateYYYYMMDD(r.delivery_date);
-    const ship      = shipDate || ""; // 画面から来た値をそのまま使う
+    const ship      = shipDate || "";
+    let delivery    = formatDateYYYYMMDD(r.delivery_date);
+
+    // 🟢 追加：お届け予定日が空なら「最短日」と記載
+    if (!delivery) delivery = "最短日";
 
     return {
       manage_no: String(i + 1).padStart(4, "0"),
       slip_type: slipType,
       cool_type: 0,
       den_no: "",
-      ship_date: ship,                          // ← ここに UI 指定が入る
+      ship_date: ship,
       delivery_date: delivery,
       time_slot: normalizeTimeSlot(r.time_slot),
       dest_phone: r.phone || "",
