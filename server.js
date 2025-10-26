@@ -1,5 +1,5 @@
 // ================================
-// server.js（管理画面拡張版）
+// server.js（管理画面 追加要件対応版）
 // nursery sera — ご注文フォームAPI
 // ================================
 
@@ -54,7 +54,7 @@ function normalizeTimeSlot(input){
   const VALID = ["0812","1214","1416","1618","1820","2021"];
   const s = String(input).trim();
   if (/^(0812|1214|1416|1618|1820|2021)$/.test(s)) return s;
-  const t = s.replace(/[：:]/g, ":").replace(/[～~\-ー−－]/g, "-").replace(/\s/g,"");
+  const t = s.replace(/[：:]/g, ":").replace(/[～~\\-ー−－]/g, "-").replace(/\s/g,"");
   if (/午前中/.test(t)) return "0812";
   const m = t.match(/(\d{1,2})(?::?\d{0,2})?-(\d{1,2})(?::?\d{0,2})?/);
   if (m){
@@ -66,10 +66,12 @@ function normalizeTimeSlot(input){
   return "";
 }
 
-// "YYYY/MM/DD"
+// "YYYY/MM/DD" に統一
 function formatDateYYYYMMDD(d){
   if (!d) return "";
-  const dt = new Date(d);
+  // "YYYY/MM/DD" or "YYYY-MM-DD" どちらでもOKにする
+  const s = String(d).replaceAll("-", "/");
+  const dt = new Date(s);
   if (isNaN(dt.getTime())) return "";
   const y = dt.getFullYear();
   const m = String(dt.getMonth()+1).padStart(2,"0");
@@ -77,13 +79,13 @@ function formatDateYYYYMMDD(d){
   return `${y}/${m}/${da}`;
 }
 
-// === CSVヘッダ定義（サーバの“正”とする） ===
+// === CSVヘッダ定義 ===
 const CSV_HEADER_MASTER = [
   { id: "manage_no",         title: "お客様管理番号" },
   { id: "slip_type",         title: "送り状種類" },         // 0=宅急便(発払い), A=ネコポス
   { id: "cool_type",         title: "クール区分" },
   { id: "den_no",            title: "伝票番号" },
-  { id: "ship_date",         title: "出荷予定日" },
+  { id: "ship_date",         title: "出荷予定日" },         // ← 今回UIの値を入れる
   { id: "delivery_date",     title: "お届け予定日" },
   { id: "time_slot",         title: "お届け時間帯" },
   { id: "dest_phone",        title: "お届け先電話番号" },
@@ -159,7 +161,7 @@ app.post("/api/orders", async (req, res) => {
   }
 });
 
-// 一覧（既存：time_slot をそのまま返す）
+// 一覧
 app.get("/api/orders", async (_req, res) => {
   try {
     const result = await pool.query("SELECT * FROM orders ORDER BY created_at DESC");
@@ -170,16 +172,18 @@ app.get("/api/orders", async (_req, res) => {
   }
 });
 
-// フロント用：CSVヘッダ（完全一致）を返す
+// CSVヘッダ
 app.get("/api/orders/csv/headers", (_req, res) => {
   res.json(CSV_HEADER_MASTER);
 });
 
-// 既存の「全部CSV」も残しておく（従来互換）
-app.get("/api/orders/csv", async (_req, res) => {
+// 一括CSV（GET）— ship_date クエリ対応
+// 例: /api/orders/csv?ship_date=2025/12/25  または 2025-12-25
+app.get("/api/orders/csv", async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM orders ORDER BY created_at DESC");
-    const { buffer, name } = await buildCsvBuffer(result.rows, null, null);
+    const shipDateFmt = formatDateYYYYMMDD(req.query?.ship_date || "");
+    const { buffer, name } = await buildCsvBuffer(result.rows, null, null, shipDateFmt);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
     res.send(buffer);
@@ -189,12 +193,13 @@ app.get("/api/orders/csv", async (_req, res) => {
   }
 });
 
-// ★ 新規：選択行・選択項目・行ごとの発送種別でCSV
-// body: { selections:[{id,slip_type}], columns:[id,id,...] }
+// 選択行CSV（POST）— ship_date 受け取り対応
+// body: { selections:[{id,slip_type}], columns:[id,...], ship_date:"YYYY/MM/DD" or "YYYY-MM-DD" }
 app.post("/api/orders/csv", async (req, res) => {
   try {
     const selections = Array.isArray(req.body?.selections) ? req.body.selections : [];
     const selectedCols = Array.isArray(req.body?.columns) ? req.body.columns : [];
+    const shipDateFmt = formatDateYYYYMMDD(req.body?.ship_date || "");
 
     if (selections.length === 0) {
       return res.status(400).json({ error: "NO_SELECTION", detail: "対象行がありません。" });
@@ -203,20 +208,18 @@ app.post("/api/orders/csv", async (req, res) => {
       return res.status(400).json({ error: "NO_COLUMNS", detail: "CSV項目が選択されていません。" });
     }
 
-    // id -> slip_type("0" or "A")
     const slipMap = new Map();
     for (const s of selections) {
-      const code = (s?.slip_type === "A") ? "A" : "0"; // デフォルト0
+      const code = (s?.slip_type === "A") ? "A" : "0";
       slipMap.set(Number(s.id), code);
     }
 
-    // 対象注文だけ取得
-    const ids = selections.map(s => Number(s.id)).filter(n => Number.isFinite(n));
+    const ids = selections.map(s => Number(s.id)).filter(Number.isFinite);
     const placeholders = ids.map((_,i)=>`$${i+1}`).join(",");
     const q = `SELECT * FROM orders WHERE id IN (${placeholders}) ORDER BY created_at DESC`;
     const { rows } = await pool.query(q, ids);
 
-    const { buffer, name } = await buildCsvBuffer(rows, selectedCols, slipMap);
+    const { buffer, name } = await buildCsvBuffer(rows, selectedCols, slipMap, shipDateFmt);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
     res.send(buffer);
@@ -226,19 +229,13 @@ app.post("/api/orders/csv", async (req, res) => {
   }
 });
 
-// === CSV生成ロジック本体 ===
-async function buildCsvBuffer(rows, selectedCols /* null=全列 */, slipMap /* null=既定 */){
-  // 出力カラム（サーバ側定義順を保ちつつ、選択があればフィルタ）
+// === CSV生成 ===
+async function buildCsvBuffer(rows, selectedCols /* null=全列 */, slipMap /* null */, shipDate /* "YYYY/MM/DD" or "" */){
   const headers = (selectedCols && selectedCols.length)
     ? CSV_HEADER_MASTER.filter(h => selectedCols.includes(h.id))
     : CSV_HEADER_MASTER.slice();
+  if (headers.length === 0) throw new Error("ヘッダが空です");
 
-  // 最低1列は必要
-  if (headers.length === 0) {
-    throw new Error("ヘッダが空です");
-  }
-
-  // 一時ファイルに書き出してからバッファ化
   const fileName = `orders_b2_${Date.now()}.csv`;
   const filePath = path.join(__dirname, fileName);
 
@@ -249,20 +246,21 @@ async function buildCsvBuffer(rows, selectedCols /* null=全列 */, slipMap /* n
     alwaysQuote: false,
   });
 
-  // レコード化
   const records = rows.map((r, i) => {
     const destName  = joinSafe([r.last_name, r.first_name], " ");
     const destAddr1 = joinSafe([r.prefecture, r.city, r.address], "");
     const destAddr2 = nn(r.building) || "";
-    const slipType  = slipMap?.get(Number(r.id)) ?? "0";    // ← 管理画面で選んだ "A" or "0"
+    const slipType  = slipMap?.get(Number(r.id)) ?? "0";
+    const delivery  = formatDateYYYYMMDD(r.delivery_date);
+    const ship      = shipDate || ""; // 画面から来た値をそのまま使う
 
     return {
       manage_no: String(i + 1).padStart(4, "0"),
-      slip_type: slipType,                   // ← ここに "A"(ネコポス) または "0"(発払い)
+      slip_type: slipType,
       cool_type: 0,
       den_no: "",
-      ship_date: "",
-      delivery_date: formatDateYYYYMMDD(r.delivery_date),
+      ship_date: ship,                          // ← ここに UI 指定が入る
+      delivery_date: delivery,
       time_slot: normalizeTimeSlot(r.time_slot),
       dest_phone: r.phone || "",
       dest_zip: (r.zipcode || "").replace(/\D/g, ""),
@@ -285,10 +283,7 @@ async function buildCsvBuffer(rows, selectedCols /* null=全列 */, slipMap /* n
     };
   });
 
-  // 選択された列だけにスリム化（csv-writer は header に無いキーを無視するためこのままOK）
   await writer.writeRecords(records);
-
-  // バッファ化して後片付け
   const buffer = await fs.promises.readFile(filePath);
   await fs.promises.unlink(filePath).catch(()=>{});
   return { buffer, name: "orders_b2.csv" };
