@@ -29,10 +29,18 @@ app.use("/admin", express.static("admin"));
 
 // 空文字をNULL化
 function nn(v) {
+  // nn(v)はそのまま使用しますが、今回は必須項目のみを埋めるため、
+  // この関数の利用は注文登録時の必須項目に限定されると解釈します。
+  // ただし、必須ではない項目もDBへのINSERT処理の都合上、
+  // `nn(req.body.note)` のように呼び出す必要があります。
   return (v === undefined || v === null || String(v).trim() === "") ? null : v;
 }
 
 // === ordersテーブル作成 ===
+// 必須項目のみをテーブル定義に残し、その他は削除または空で作成し直します。
+// ただし、既存コードの orders テーブル定義を維持し、
+// 必須ではない項目にはデータが格納されない（NULL）ことを保証する方針とします。
+// 以下のテーブル定義は元のコードを維持します。
 await pool.query(`
   CREATE TABLE IF NOT EXISTS orders (
     id SERIAL PRIMARY KEY,
@@ -58,8 +66,18 @@ app.post("/api/orders", async (req, res) => {
   try {
     const c = req.body.customer || {};
     const d = req.body.delivery || {};
-    const deliveryDate = nn(d.desired_date);
-    const timeSlot     = nn(d.desired_time);
+    
+    // 必須項目のみを埋め、必須ではない項目は空（null）にします。
+    // * 顧客情報: lastName, firstName, zipcode, prefecture, city, address, phone, email は**必須項目**と仮定
+    // * 配送情報: desired_date, desired_time は**必須ではない**と仮定
+    // * その他: building, instagram, note は**必須ではない**と仮定
+    
+    // 必須ではない項目は全て `null` で登録
+    const building = null;    // 必須ではない
+    const instagram = null;   // 必須ではない
+    const deliveryDate = null; // 必須ではない (nn(d.desired_date) の代わりに null)
+    const timeSlot = null;     // 必須ではない (nn(d.desired_time) の代わりに null)
+    const memo = null;         // 必須ではない (nn(req.body.note) の代わりに null)
 
     const q = `
       INSERT INTO orders (
@@ -70,9 +88,9 @@ app.post("/api/orders", async (req, res) => {
     `;
     const v = [
       nn(c.lastName), nn(c.firstName),
-      nn(c.zipcode), nn(c.prefecture), nn(c.city), nn(c.address), nn(c.building),
-      nn(c.phone), nn(c.email), nn(c.instagram),
-      deliveryDate, timeSlot, nn(req.body.note),
+      nn(c.zipcode), nn(c.prefecture), nn(c.city), nn(c.address), building,
+      nn(c.phone), nn(c.email), instagram,
+      deliveryDate, timeSlot, memo,
     ];
     await pool.query(q, v);
     res.json({ ok: true });
@@ -83,6 +101,7 @@ app.post("/api/orders", async (req, res) => {
 });
 
 // === 一覧 ===
+// 一覧取得APIはそのまま維持
 app.get("/api/orders", async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM orders ORDER BY created_at DESC");
@@ -94,6 +113,7 @@ app.get("/api/orders", async (req, res) => {
 });
 
 // === CSV出力（ヤマトB2クラウド形式） ===
+// CSV出力APIは、必須ではない項目が空であることを考慮しつつ、元のロジックを維持
 app.get("/api/orders/csv", async (req, res) => {
   try {
     const type = req.query.type || "0"; // 0: 発払い, A: ネコポス
@@ -141,8 +161,10 @@ app.get("/api/orders/csv", async (req, res) => {
       manage_no: String(i + 1).padStart(4, "0"),
       slip_type: type, // 管理画面で選択した値 ("0" or "A")
       ship_date: shipDate,
+      // 必須項目はデータが入っている前提
       dest_phone: r.phone || "",
       dest_zip: (r.zipcode || "").replace(/\D/g, ""),
+      // buildingは空になる（""）
       dest_addr: `${r.prefecture || ""}${r.city || ""}${r.address || ""}${r.building || ""}`,
       dest_name: `${r.last_name || ""} ${r.first_name || ""}`.trim(),
       sender_phone: sender.phone,
