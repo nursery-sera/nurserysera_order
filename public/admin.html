@@ -6,157 +6,114 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <style>
     :root{
-      --fz:18px;           /* 文字サイズ（入力でのズーム防止のため16px以上） */
+      --fz:18px;           /* 入力ズーム防止のため16px以上 */
       --fz-lg:20px;
-      --pad:10px;          /* 余白大きめでタップしやすく */
-      --btn-h:56px;        /* ボタン高（通常の約3倍） */
+      --btn-h:56px;        /* ボタン高（約3倍） */
       --chk-scale:1.8;     /* チェックボックス拡大（約2倍） */
     }
     *{box-sizing:border-box;}
-    html,body{height:100%;}
     body{
       font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
-      margin:0;
-      padding:var(--pad);
+      margin:40px; /* 既存を維持 */
       font-size:var(--fz);
-      line-height:1.2;
-      background:#fff;
       color:#111;
     }
-    h1{font-size:22px;margin:4px 0 8px;}
-    .controls{
-      position:sticky; top:0; z-index:3; background:#fff;
-      display:grid; gap:8px; padding-bottom:8px; border-bottom:1px solid #ddd;
-    }
-    .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
-    button,.btn{
-      font-size:var(--fz-lg);
-      min-height:var(--btn-h);
+
+    table{border-collapse:collapse;width:100%;}
+    th,td{border:1px solid #ccc;padding:10px;text-align:left;vertical-align:top;}
+    th{background:#eee;font-size:18px;}
+    td{font-size:20px;line-height:1.15;} /* “画面いっぱい大きく” */
+
+    button{
+      margin:10px 0;
       padding:10px 16px;
-      border-radius:10px;
-      border:1px solid #bbb;
-      background:#f7f7f7;
-      cursor:pointer;
-      touch-action:manipulation;
-    }
-    button:active{background:#eee;}
-    .btn-primary{background:#0ea5e9; color:#fff; border-color:#0ea5e9;}
-    .btn-ghost{background:#fff;}
-    .note{font-size:16px; color:#444; line-height:1.25;}
-
-    /* 入力は16px以上でズーム防止 */
-    input,select{
       font-size:var(--fz-lg);
-      min-height:48px;
-      padding:10px 12px;
-      border-radius:10px;
+      min-height:var(--btn-h);            /* ボタンを背高に */
+      cursor:pointer;
       border:1px solid #bbb;
-      background:#fff;
+      border-radius:10px;
+      background:#f7f7f7;
     }
 
-    /* テーブルはモバイル向け大きめ＆折り返し */
-    table{border-collapse:collapse;width:100%; table-layout:fixed; margin-top:10px;}
-    th,td{border:1px solid #ddd; padding:10px; vertical-align:top; word-break:break-word;}
-    th{background:#f5f5f5; position:sticky; top: calc(var(--btn-h) + 40px); z-index:2; font-size:18px;}
-    td{font-size:20px;} /* 画面いっぱい大きく表示 */
-    .muted{color:#666; font-size:16px;}
+    .controls{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin:8px 0 16px;}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
 
-    /* チェックボックス拡大 */
-    input[type="checkbox"]{
-      width:24px; height:24px;
-      transform: scale(var(--chk-scale));
-      transform-origin:left top;
-      margin:8px 0;
-    }
+    .cols-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 14px;margin-top:8px;max-height:260px;overflow:auto;padding:8px;border:1px solid #ddd;border-radius:6px;background:#fafafa;}
+    .muted{color:#666;font-size:16px;white-space:pre-line;} /* 説明を2行表示しやすく */
 
-    /* 列幅（モバイルで見切れないように） */
-    .col-id{width:72px;}
-    .col-name{width:140px;}
-    .col-addr{width:240px;}
-    .col-phone{width:120px;}
-    .col-date{width:110px;}
-    .col-time{width:80px;}
-    .col-shipdate{width:120px;}
-    .col-kind{width:90px;}
+    .ship-preview{font-weight:bold;}
 
-    /* セレクト(発送種別)はA/0だけを大きく */
-    .ship-type{
-      width:100%;
-      text-align:center;
-      font-weight:bold;
-    }
+    /* 入力は16px以上でiOSズーム防止 */
+    input[type="text"]{padding:10px 12px;font-size:var(--fz-lg);border:1px solid #bbb;border-radius:10px;}
 
-    details{margin-top:12px;}
-    summary{font-size:18px;}
+    /* 行チェックボックスを2倍くらいに */
+    .row-check{transform:scale(var(--chk-scale));transform-origin:left top;margin:8px 0;}
 
-    /* 2行表記の数字を中央寄せで縦に詰める */
-    .twolines{white-space:pre-line; text-align:center; line-height:1.15;}
-    .center{ text-align:center; }
-
-    /* A=ネコポス / 0=発払い の2行表記 */
-    .legend{
-      border:1px dashed #bbb; border-radius:10px; padding:8px 12px; background:#fafafa; display:inline-block;
-      white-space:pre-line; font-size:18px;
-    }
+    /* “2行表示”の見た目を中央寄せで */
+    .twolines{white-space:pre-line;text-align:center;}
+    .center{text-align:center;}
   </style>
 </head>
 <body>
   <h1>注文データ一覧</h1>
 
   <div class="controls">
-    <!-- 1段目：主要操作（高さは共通で約3倍） -->
+    <!-- 1行目：選択行CSV + 右側ツール群（位置は変えない） -->
     <div class="row">
-      <button id="csvSelectedBtn" class="btn-primary">選択行をCSVダウンロード</button>
-      <button id="csvAllBtn" class="btn">一括CSVダウンロード</button>
-      <button id="toggleAllBtn" class="btn-ghost">一括選択/解除</button>
+      <button id="csvSelectedBtn">選択行をCSVダウンロード</button>
     </div>
-
-    <!-- 2段目：発送種別 変換 / 出荷予定日 入力（年ボタン + MMDD） -->
     <div class="row">
-      <button id="toNekoposBtn" class="btn">選択行をネコポスに変換</button>
-      <button id="toHatsubaraiBtn" class="btn">選択行を発払いに変換</button>
+      <button id="toNekoposBtn">選択行をネコポスに変換</button>
 
-      <span class="legend">A=ネコポス
-0=発払い</span>
-
-      <button id="shipYearBtn" title="年を変更（初期＝今年）" class="btn-ghost">2025</button>
+      <!-- 出荷予定日：年ボタン + MMDD入力 + プレビュー（ズーム防止済み） -->
+      <button id="shipYearBtn" title="クリックで年を変更">2025</button>
       <label>
-        出荷予定日(MMDD)：<input type="text" id="shipMmdd" placeholder="1225" maxlength="4" inputmode="numeric" pattern="[0-9]*" style="width:120px;">
+        出荷予定日(MMDD)：<input type="text" id="shipMmdd" placeholder="例: 1225" maxlength="4" inputmode="numeric" pattern="[0-9]*">
       </label>
-      <span class="note">→ <b id="shipPreview">未設定</b></span>
+      <span>→ <span id="shipPreview" class="ship-preview">未設定</span></span>
     </div>
 
-    <!-- 任意：CSV項目選択（折りたたみ） -->
-    <details id="colPicker">
-      <summary>CSVに含める項目を選ぶ（サーバー定義と完全一致）</summary>
-      <div id="colsContainer" class="cols-list"></div>
-      <label style="display:block;margin-top:8px;">
-        <input type="checkbox" id="checkAllCols"> すべて選択 / 解除
-      </label>
-    </details>
+    <!-- 2行目：一括CSV（選択行ボタンの下） -->
+    <div class="row">
+      <button id="csvAllBtn">一括CSVダウンロード</button>
+    </div>
+    <div class="row">
+      <button id="toHatsubaraiBtn">選択行を発払いに変換</button>
+      <span class="muted">A=ネコポス
+0=発払い</span>
+    </div>
   </div>
+
+  <details id="colPicker">
+    <summary>CSVに含める項目を選ぶ（サーバー定義と完全一致）</summary>
+    <div id="colsContainer" class="cols-list"></div>
+    <label style="display:block;margin-top:8px;">
+      <input type="checkbox" id="checkAllCols"> すべて選択 / 解除
+    </label>
+  </details>
 
   <table id="ordersTable">
     <thead>
       <tr>
-        <!-- ヘッダーの一括チェックは消す（ご要望） -->
-        <th class="col-id">選択</th>
-        <th class="col-id">ID</th>
-        <th class="col-name">名前</th>
-        <th class="col-addr">住所</th>
-        <th class="col-phone">電話</th>
-        <th class="col-date">配達希望日</th>
-        <th class="col-time">配達希望時間</th>
-        <th class="col-shipdate">出荷予定日</th>
-        <th class="col-date">登録日</th>
-        <th class="col-kind">発送種別</th>
+        <!-- ★ ヘッダーの“一括チェック”だけ削除（他のチェックは残す） -->
+        <th>選択</th>
+        <th>ID</th>
+        <th>名前</th>
+        <th>住所</th>
+        <th>電話</th>
+        <th>配達希望日</th>
+        <th>配達希望時間</th>
+        <th>出荷予定日</th>
+        <th>登録日</th>
+        <th>発送種別<br><span class="muted">A=ネコポス
+0=発払い</span></th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
 
   <script type="module">
-    // ===== パスワードガード =====
+    // ===== パスワードガード（既存） =====
     (function(){
       const pass = sessionStorage.getItem('admin-pass') || prompt('パスワードを入力してください');
       if (pass !== 'kohakurira') {
@@ -170,11 +127,10 @@
     // ===== グローバル =====
     let ORDERS = [];
     let CSV_HEADERS = [];
-    let shipYear = new Date().getFullYear(); // 初期は今年
-    let shipMmdd = "";                       // "MMDD" 4桁（例: "1225"）
-    let toggleAllState = false;
+    let shipYear = new Date().getFullYear(); // 今年を初期
+    let shipMmdd = "";                       // "MMDD" 例: "1225"
 
-    // ===== 表示用フォーマッタ =====
+    // ===== 整形ユーティリティ（見た目だけ変える） =====
     const onlyDigits = s => (s||"").replace(/\D/g,"");
 
     // 5文字ごとに改行
@@ -183,26 +139,28 @@
       if (!s) return "";
       const chunks = [];
       for (let i=0; i<s.length; i+=n) chunks.push(s.slice(i, i+n));
-      return chunks.join("\n");
+      return chunks.join("\\n");
     }
 
-    // 住所：都道府県 / 市区町村 / 番地 / 建物名 をそれぞれ改行、
-    // さらに各要素は5文字ごとに改行してコンパクト表示
+    // 住所：都道府県 / 市区町村 / 番地 / 建物名 で改行 + 各要素5文字ごと改行
     function formatAddress(pref, city, addr, bld){
-      const parts = [pref, city, addr, bld].map(p => breakEveryN(p,5)).filter(Boolean);
-      return parts.join("\n");
+      const parts = [pref, city, addr, bld]
+        .map(p => breakEveryN(p,5))
+        .filter(Boolean);
+      return parts.join("\\n");
     }
 
-    // 電話：3行（3 / 4 / 4）
+    // 電話：3 / 4 / 4 の3行
     function formatPhone(phone){
-      const d = onlyDigits(phone).padEnd(11, " ");
-      const a = d.slice(0,3).trim();
-      const b = d.slice(3,7).trim();
-      const c = d.slice(7,11).trim();
-      return [a,b,c].filter(Boolean).join("\n");
+      const d = onlyDigits(phone);
+      if (!d) return "-";
+      const a = d.slice(0,3);
+      const b = d.slice(3,7);
+      const c = d.slice(7,11);
+      return [a,b,c].filter(Boolean).join("\\n");
     }
 
-    // 日付：YYYY/MM/DD → 「YYYY\nMM/DD」
+    // 日付 → 「YYYY\\nMM/DD」
     function toYAndMd(d){
       if (!d) return "-";
       const dt = new Date(d);
@@ -210,21 +168,21 @@
       const y = dt.getFullYear();
       const m = String(dt.getMonth()+1).padStart(2,"0");
       const da = String(dt.getDate()).padStart(2,"0");
-      return `${y}\n${m}/${da}`;
+      return `${y}\\n${m}/${da}`;
     }
 
-    // 時間帯：1820 → "18\n20"
+    // 時間帯：1820 → "18\\n20"
     function formatTimeSlot(slot){
       if (!slot) return "-";
-      const s = String(slot).replace(/\D/g,"");
-      if (s.length===4) return `${s.slice(0,2)}\n${s.slice(2,4)}`;
-      return breakEveryN(s,2); // 念のため
+      const s = String(slot).replace(/\\D/g,"");
+      if (s.length===4) return `${s.slice(0,2)}\\n${s.slice(2,4)}`;
+      return s; // 想定外はそのまま
     }
 
-    // MMDD -> "YYYY/MM/DD"（ヤマト形式）
+    // MMDD -> "YYYY/MM/DD"（CSV用＆プレビュー）
     function mmddToYmd(year, mmdd){
       const m = (mmdd || "").trim();
-      if (!/^\d{4}$/.test(m)) return "";
+      if (!/^\\d{4}$/.test(m)) return "";
       const MM = m.slice(0,2), DD = m.slice(2,4);
       const dt = new Date(`${year}/${MM}/${DD}`);
       if (isNaN(dt.getTime())) return "";
@@ -239,13 +197,12 @@
       document.getElementById('shipYearBtn').textContent = String(shipYear);
       const ymd = getShipDateYmd();
       document.getElementById('shipPreview').textContent = ymd || "未設定";
-      // テーブルの「出荷予定日」列（見た目のみ）更新
-      document.querySelectorAll('td[data-col="ship"]').forEach(td=>{
-        td.textContent = ymd ? (ymd.split("/")[0] + "\n" + ymd.slice(5)) : "-";
-      });
+      // 表の「出荷予定日」を2行表示（見た目のみ更新）
+      const show = ymd ? (ymd.split("/")[0] + "\\n" + ymd.slice(5)) : "-";
+      document.querySelectorAll('td[data-col="ship"]').forEach(td=> td.textContent = show);
     }
 
-    // ===== CSVヘッダ =====
+    // ===== CSVヘッダ取得（既存） =====
     async function loadCsvHeaders() {
       const res = await fetch('/api/orders/csv/headers');
       if (!res.ok) throw new Error('CSVヘッダ取得に失敗');
@@ -264,7 +221,7 @@
       });
     }
 
-    // ===== 注文読込＆描画 =====
+    // ===== 注文データ描画（配置はそのまま、表示だけコンパクト化） =====
     async function loadOrders(){
       const res = await fetch("/api/orders");
       if (!res.ok) throw new Error("データ取得に失敗しました");
@@ -272,28 +229,23 @@
 
       const tbody = document.querySelector("#ordersTable tbody");
       tbody.innerHTML = "";
-
       ORDERS.forEach(row=>{
         const tr = document.createElement("tr");
-        const fullName = `${row.last_name || ''} ${row.first_name || ''}`.trim();
-
-        const addr = formatAddress(
-          row.prefecture || '', row.city || '', row.address || '', row.building || ''
-        );
-        const phone = formatPhone(row.phone || '');
-
+        const fullName = `${row.last_name || ''} ${row.first_name || ''}`.trim() || "-";
+        const addr = formatAddress(row.prefecture||'', row.city||'', row.address||'', row.building||'') || "-";
+        const phone = formatPhone(row.phone||'');
         const deliv = row.delivery_date ? toYAndMd(row.delivery_date) : "-";
-        const time  = formatTimeSlot(row.time_slot || "");
+        const time  = formatTimeSlot(row.time_slot||"");
         const created = row.created_at ? toYAndMd(row.created_at) : "-";
 
         tr.innerHTML = `
           <td class="center"><input type="checkbox" class="row-check" data-id="${row.id}"></td>
           <td class="center">${row.id}</td>
-          <td class="center">${fullName || "-"}</td>
-          <td class="twolines">${addr || "-"}</td>
+          <td class="center">${fullName}</td>
+          <td class="twolines">${addr}</td>
           <td class="twolines center">${phone || "-"}</td>
           <td class="twolines center">${deliv}</td>
-          <td class="twolines center">${time}</td>
+          <td class="twolines center">${time || "-"}</td>
           <td class="twolines center" data-col="ship">-</td>
           <td class="twolines center">${created}</td>
           <td class="center">
@@ -306,22 +258,42 @@
         tbody.appendChild(tr);
       });
 
-      refreshShipPreview(); // 出荷予定日見た目反映
+      refreshShipPreview(); // 出荷予定日の見た目を反映
     }
 
-    // ===== 一括選択/解除 =====
-    document.getElementById('toggleAllBtn').addEventListener('click', ()=>{
-      toggleAllState = !toggleAllState;
-      document.querySelectorAll('.row-check').forEach(cb => cb.checked = toggleAllState);
+    // ===== 変換ボタン（ネコポス/発払い） =====
+    function setSelectedShipType(to){
+      const ids = new Set(
+        Array.from(document.querySelectorAll('.row-check:checked')).map(cb => Number(cb.dataset.id))
+      );
+      if (ids.size === 0){ alert('対象行をチェックしてください。'); return; }
+      document.querySelectorAll('.ship-type').forEach(sel=>{
+        const id = Number(sel.dataset.id);
+        if (ids.has(id)) sel.value = to; // "A" or "0"
+      });
+    }
+    document.getElementById('toNekoposBtn').addEventListener('click', ()=> setSelectedShipType('A'));
+    document.getElementById('toHatsubaraiBtn').addEventListener('click', ()=> setSelectedShipType('0'));
+
+    // ===== 出荷予定日：年ボタン & MMDD入力（入力ズームはCSSで防止） =====
+    document.getElementById('shipYearBtn').addEventListener('click', ()=>{
+      const y = prompt('出荷予定年を4桁で入力してください', String(shipYear));
+      if (!y) return;
+      if (!/^\\d{4}$/.test(y)) { alert('4桁の年を入力してください'); return; }
+      shipYear = Number(y);
+      refreshShipPreview();
+    });
+    document.getElementById('shipMmdd').addEventListener('input', (e)=>{
+      shipMmdd = e.target.value.replace(/\\D/g,'').slice(0,4);
+      e.target.value = shipMmdd;
+      refreshShipPreview();
     });
 
-    // ===== 選択中のCSV項目ID配列 =====
+    // ===== CSV: 選択行 =====
     function getSelectedColumnIds() {
       return Array.from(document.querySelectorAll('#colsContainer input[type="checkbox"]:checked'))
         .map(cb => cb.dataset.id);
     }
-
-    // ===== 選択中の注文 + 発送種別 =====
     function getSelections() {
       const checkedIds = new Set(
         Array.from(document.querySelectorAll('.row-check:checked')).map(cb => Number(cb.dataset.id))
@@ -333,43 +305,12 @@
       return Array.from(checkedIds).map(id => ({ id, slip_type: mapShip[id] || "0" }));
     }
 
-    // ===== 変換ボタン：ネコポス / 発払い =====
-    function setSelectedShipType(to){
-      const ids = new Set(
-        Array.from(document.querySelectorAll('.row-check:checked')).map(cb => Number(cb.dataset.id))
-      );
-      if (ids.size === 0){
-        alert('対象行をチェックしてください。');
-        return;
-      }
-      document.querySelectorAll('.ship-type').forEach(sel=>{
-        const id = Number(sel.dataset.id);
-        if (ids.has(id)) sel.value = to; // "A" or "0"
-      });
-    }
-    document.getElementById('toNekoposBtn').addEventListener('click', ()=> setSelectedShipType('A'));
-    document.getElementById('toHatsubaraiBtn').addEventListener('click', ()=> setSelectedShipType('0'));
-
-    // ===== 出荷予定日：年ボタン & MMDD入力（ズーム防止はCSSのfont-size>=16で対応） =====
-    document.getElementById('shipYearBtn').addEventListener('click', ()=>{
-      const y = prompt('出荷予定年を4桁で入力してください', String(shipYear));
-      if (!y) return;
-      if (!/^\d{4}$/.test(y)) { alert('4桁の年を入力してください'); return; }
-      shipYear = Number(y);
-      refreshShipPreview();
-    });
-    document.getElementById('shipMmdd').addEventListener('input', (e)=>{
-      shipMmdd = e.target.value.replace(/\D/g,'').slice(0,4);
-      e.target.value = shipMmdd;
-      refreshShipPreview();
-    });
-
-    // ===== CSV: 選択行 =====
     async function downloadSelectedCsv() {
       const selections = getSelections();
       if (selections.length === 0) { alert("CSVにする行をチェックしてください。"); return; }
       const columns = getSelectedColumnIds();
       if (columns.length === 0) { alert("CSV項目を1つ以上選んでください。"); return; }
+
       const shipDate = getShipDateYmd(); // "YYYY/MM/DD" or ""
       try {
         const res = await fetch('/api/orders/csv', {
@@ -417,28 +358,11 @@
     document.getElementById('csvAllBtn').addEventListener('click', downloadAllCsv);
 
     // ===== 初期表示 =====
-    async function loadCsvHeaders() {
-      const res = await fetch('/api/orders/csv/headers');
-      if (!res.ok) throw new Error('CSVヘッダ取得に失敗');
-      CSV_HEADERS = await res.json();
-      const box = document.querySelector('#colsContainer');
-      box.innerHTML = '';
-      CSV_HEADERS.forEach(h => {
-        const id = `col-${h.id}`;
-        const div = document.createElement('label');
-        div.innerHTML = `<input type="checkbox" id="${id}" data-id="${h.id}" checked> ${h.title} <span class="muted">(${h.id})</span>`;
-        box.appendChild(div);
-      });
-      document.getElementById('checkAllCols').addEventListener('change', e=>{
-        const checked = e.target.checked;
-        box.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = checked);
-      });
-    }
-
     (async ()=>{
       try {
         await loadCsvHeaders();
         await loadOrders();
+        refreshShipPreview();
       } catch (e) {
         console.error("初期化エラー:", e);
         alert("初期化中にエラーが発生しました。");
