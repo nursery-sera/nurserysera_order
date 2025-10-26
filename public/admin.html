@@ -1,49 +1,54 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>nursery sera — 注文管理</title>
   <style>
     body{font-family:sans-serif;margin:40px;}
     table{border-collapse:collapse;width:100%;}
-    th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;font-size:14px;vertical-align:middle;}
+    th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;font-size:14px;vertical-align:top;}
     th{background:#eee;}
-    button, select{margin:10px 6px 10px 0;padding:6px 14px;font-size:14px;cursor:pointer;}
-    .controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px;}
-    .muted{color:#666;font-size:12px;margin-left:8px;}
-    .w-compact{width:1%;white-space:nowrap;}
+    button{margin:10px 0;padding:6px 14px;font-size:14px;cursor:pointer;}
+    .controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0 16px;}
+    .cols-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 14px;margin-top:8px;max-height:260px;overflow:auto;padding:8px;border:1px solid #ddd;border-radius:6px;background:#fafafa;}
+    .muted{color:#666;font-size:12px;}
   </style>
 </head>
 <body>
   <h1>注文データ一覧</h1>
 
   <div class="controls">
-    <button id="csvBtn">（サーバー）全件CSVダウンロード</button>
-
-    <label>一括送り方:
-      <select id="bulkMethod">
-        <option value="ネコポス">ネコポス</option>
-        <option value="発払い">発払い</option>
-      </select>
-    </label>
-    <button id="applyBulk">選択行に一括適用</button>
-    <button id="selectedCsvBtn">（フロント）選択分CSVダウンロード</button>
-    <span class="muted">※選択分CSVはサーバーの列構成と完全一致、送り状種類のみ UI 選択（0 or A）を反映</span>
+    <button id="csvSelectedBtn">選択行をCSVダウンロード</button>
+    <span class="muted">※「発送種別」は行ごとに選べます（A=ネコポス / 0=発払い）。</span>
   </div>
+
+  <details id="colPicker">
+    <summary>CSVに含める項目を選ぶ（サーバー定義と完全一致）</summary>
+    <div id="colsContainer" class="cols-list"></div>
+    <label style="display:block;margin-top:8px;">
+      <input type="checkbox" id="checkAllCols"> すべて選択 / 解除
+    </label>
+  </details>
 
   <table id="ordersTable">
     <thead>
       <tr>
-        <th class="w-compact"><input type="checkbox" id="checkAll" title="全選択/解除"></th>
-        <th>ID</th><th>名前</th><th>住所</th><th>電話</th>
-        <th>希望日</th><th>希望時間</th><th>送り方</th><th>登録日</th>
+        <th><input type="checkbox" id="checkAllRows"></th>
+        <th>ID</th>
+        <th>名前</th>
+        <th>住所</th>
+        <th>電話</th>
+        <th>配達希望日</th>
+        <th>配達希望時間</th>
+        <th>登録日</th>
+        <th>発送種別<br><span class="muted">A=ネコポス / 0=発払い</span></th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
 
   <script type="module">
-    // ===== パスワードガード =====
+    // ===== パスワードガード（既存のまま） =====
     (function(){
       const pass = sessionStorage.getItem('admin-pass') || prompt('パスワードを入力してください');
       if (pass !== 'kohakurira') {
@@ -54,245 +59,139 @@
       }
     })();
 
-    // ===== サーバーと同じ固定値 =====
-    const BILLING_CUSTOMER_CODE = "09067309120";
-    const FREIGHT_MGMT_NO = "01";
-    const DEFAULT_ITEM_NAME = "フラワーギフト";
-    const CONSIGNOR = {
-      phone: "09067309120",
-      zip: "5798023",
-      addr: "大阪府東大阪市立花町14-4",
-      name: "NURSERY SERA",
-    };
+    // ===== グローバル =====
+    let ORDERS = [];
+    let CSV_HEADERS = [];
 
-    // ===== サーバーと同じ整形関数 =====
-    function nn(v){ return (v===undefined || v===null || String(v).trim()==="") ? null : v; }
-    function joinSafe(parts, sep=""){ return parts.filter(p => p!==null && p!==undefined && String(p).trim()!=="").join(sep); }
-
-    // B2時間帯コード正規化
-    function normalizeTimeSlot(input) {
-      if (!input) return "";
-      const VALID = ["0812","1214","1416","1618","1820","2021"];
-      const s = String(input).trim();
-      if (/^(0812|1214|1416|1618|1820|2021)$/.test(s)) return s;
-      const t = s.replace(/[：:]/g, ":").replace(/[～~\-ー−－]/g, "-").replace(/\s/g, "");
-      if (/午前中/.test(t)) return "0812";
-      const m = t.match(/(\d{1,2})(?::?\d{0,2})?-(\d{1,2})(?::?\d{0,2})?/);
-      if (m) {
-        const a = m[1].padStart(2,"0");
-        const b = m[2].padStart(2,"0");
-        const code = `${a}${b}`;
-        if (VALID.includes(code)) return code;
-      }
-      return "";
-    }
-    function formatDateYYYYMMDD(d) {
-      if (!d) return "";
-      const dt = new Date(d);
-      if (isNaN(dt.getTime())) return "";
-      const y = dt.getFullYear();
-      const m = String(dt.getMonth()+1).padStart(2,"0");
-      const da = String(dt.getDate()).padStart(2,"0");
-      return `${y}/${m}/${da}`;
+    // ===== サーバ定義CSVヘッダを取得してチェック群を作成 =====
+    async function loadCsvHeaders() {
+      const res = await fetch('/api/orders/csv/headers');
+      if (!res.ok) throw new Error('CSVヘッダ取得に失敗');
+      CSV_HEADERS = await res.json(); // [{id,title},...]
+      const box = document.querySelector('#colsContainer');
+      box.innerHTML = '';
+      CSV_HEADERS.forEach(h => {
+        const id = `col-${h.id}`;
+        const div = document.createElement('label');
+        div.innerHTML = `<input type="checkbox" id="${id}" data-id="${h.id}" checked> ${h.title} <span class="muted">(${h.id})</span>`;
+        box.appendChild(div);
+      });
+      document.getElementById('checkAllCols').addEventListener('change', e=>{
+        const checked = e.target.checked;
+        box.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = checked);
+      });
     }
 
-    // ===== 状態 =====
-    const tbody = document.querySelector("#ordersTable tbody");
-    const checkAll = document.getElementById("checkAll");
-    /** @type {Array<{row:any, selected:boolean, method:'ネコポス'|'発払い'}>} */
-    let grid = [];
-
-    // ===== ロード =====
+    // ===== 注文データを読み込む =====
     async function loadOrders(){
-      try{
-        const res = await fetch("/api/orders");
-        if (!res.ok) throw new Error("データ取得に失敗しました");
-        const data = await res.json();
-
-        // 既存選択/送り方維持
-        const prevMap = new Map(grid.map(g => [g.row.id, g]));
-        grid = data.map(row => {
-          const prev = prevMap.get(row.id);
-          return {
-            row,
-            selected: prev ? prev.selected : false,
-            method: prev ? prev.method : "発払い" // 既定は宅急便（発払い=0）
-          };
-        });
-
-        renderTable();
-      }catch(e){
-        console.error(e);
-        alert("データの読み込み中にエラーが発生しました。");
-      }
-    }
-
-    function renderTable(){
+      const res = await fetch("/api/orders");
+      if (!res.ok) throw new Error("データ取得に失敗しました");
+      ORDERS = await res.json();
+      const tbody = document.querySelector("#ordersTable tbody");
       tbody.innerHTML = "";
-      grid.forEach((g, idx) => {
-        const r = g.row;
-        const fullName = joinSafe([r.last_name, r.first_name], " ");
-        const fullAddr = joinSafe([r.prefecture, r.city, r.address, r.building], "");
-        const createdAt = r.created_at ? new Date(r.created_at).toLocaleString() : "-";
-        const deliveryDate = r.delivery_date || "-";
-        const deliveryTime = r.time_slot || "-"; // ★ サーバーのカラム名に合わせる
-
+      ORDERS.forEach(row=>{
         const tr = document.createElement("tr");
+        const fullName = `${row.last_name || ''} ${row.first_name || ''}`.trim();
+        const addr = `${row.prefecture || ''}${row.city || ''}${row.address || ''}${row.building || ''}`;
+        const deliveryDate = row.delivery_date ? new Date(row.delivery_date).toLocaleDateString() : "-";
+        const timeSlot = row.time_slot || "-";
+        const created = new Date(row.created_at).toLocaleString();
         tr.innerHTML = `
-          <td><input type="checkbox" class="row-check" data-idx="${idx}" ${g.selected ? "checked":""}></td>
-          <td>${r.id}</td>
-          <td>${escapeHtml(fullName)}</td>
-          <td>${escapeHtml(fullAddr)}</td>
-          <td>${escapeHtml(r.phone || "-")}</td>
-          <td>${escapeHtml(deliveryDate)}</td>
-          <td>${escapeHtml(deliveryTime)}</td>
+          <td><input type="checkbox" class="row-check" data-id="${row.id}"></td>
+          <td>${row.id}</td>
+          <td>${fullName}</td>
+          <td>${addr}</td>
+          <td>${row.phone || ''}</td>
+          <td>${deliveryDate}</td>
+          <td>${timeSlot}</td>
+          <td>${created}</td>
           <td>
-            <select class="row-method" data-idx="${idx}">
-              <option value="ネコポス" ${g.method==="ネコポス"?"selected":""}>ネコポス</option>
-              <option value="発払い" ${g.method==="発払い"?"selected":""}>発払い</option>
+            <select class="ship-type" data-id="${row.id}">
+              <option value="0">0（発払い/宅急便）</option>
+              <option value="A">A（ネコポス）</option>
             </select>
           </td>
-          <td>${escapeHtml(createdAt)}</td>
         `;
         tbody.appendChild(tr);
       });
 
-      tbody.querySelectorAll(".row-check").forEach(el=>{
-        el.addEventListener("change", e=>{
-          const i = Number(e.target.dataset.idx);
-          grid[i].selected = e.target.checked;
-          syncCheckAll();
-        });
+      // 全選択
+      const all = document.getElementById('checkAllRows');
+      all.addEventListener('change', e=>{
+        const checked = e.target.checked;
+        document.querySelectorAll('.row-check').forEach(cb => cb.checked = checked);
       });
-      tbody.querySelectorAll(".row-method").forEach(el=>{
-        el.addEventListener("change", e=>{
-          const i = Number(e.target.dataset.idx);
-          grid[i].method = e.target.value;
-        });
+    }
+
+    // 選択中のCSV項目ID配列
+    function getSelectedColumnIds() {
+      return Array.from(document.querySelectorAll('#colsContainer input[type="checkbox"]:checked'))
+        .map(cb => cb.dataset.id);
+    }
+
+    // 選択中の注文 + 発送種別
+    function getSelections() {
+      const checkedIds = new Set(
+        Array.from(document.querySelectorAll('.row-check:checked')).map(cb => Number(cb.dataset.id))
+      );
+      const mapShip = {};
+      document.querySelectorAll('.ship-type').forEach(sel=>{
+        mapShip[Number(sel.dataset.id)] = sel.value; // "0" or "A"
       });
-
-      syncCheckAll();
+      return Array.from(checkedIds).map(id => ({ id, slip_type: mapShip[id] || "0" }));
     }
 
-    function escapeHtml(str){
-      if (str==null) return "";
-      return String(str)
-        .replaceAll("&","&amp;").replaceAll("<","&lt;")
-        .replaceAll(">","&gt;").replaceAll('"',"&quot;")
-        .replaceAll("'","&#39;");
-    }
-
-    // ===== サーバーと同じCSV列（タイトル＆順番） =====
-    const CSV_HEADERS = [
-      "お客様管理番号","送り状種類","クール区分","伝票番号","出荷予定日",
-      "お届け予定日","お届け時間帯","お届け先電話番号","お届け先郵便番号",
-      "お届け先住所１","お届け先住所２","お届け先会社・部門名","お届け先名",
-      "お届け先名(カナ)","敬称","品名コード1","品名1","出荷個数","記事",
-      "ご依頼主電話番号","ご依頼主郵便番号","ご依頼主住所","ご依頼主名",
-      "ご請求先顧客コード","運賃管理番号"
-    ];
-
-    // ===== 選択行 → サーバー同仕様CSVテキスト生成 =====
-    function buildSelectedCsv(selected){
-      const lines = [CSV_HEADERS.join(",")];
-
-      selected.forEach((g, i) => {
-        const r = g.row;
-        const destName  = joinSafe([r.last_name, r.first_name], " ");
-        const destAddr1 = joinSafe([r.prefecture, r.city, r.address], "");
-        const destAddr2 = nn(r.building) || "";
-        const slipType  = (g.method === "ネコポス") ? "A" : "0"; // ★ ご要望：0 or A
-
-        const rowOut = [
-          String(i+1).padStart(4,"0"),         // お客様管理番号
-          slipType,                              // 送り状種類（0:宅急便 / A:ネコポス）
-          "0",                                   // クール区分（固定：無し）
-          "",                                    // 伝票番号
-          "",                                    // 出荷予定日
-          formatDateYYYYMMDD(r.delivery_date),   // お届け予定日
-          normalizeTimeSlot(r.time_slot),        // お届け時間帯
-          r.phone || "",                         // お届け先電話番号
-          (r.zipcode||"").replace(/\D/g,""),     // お届け先郵便番号
-          destAddr1,                             // お届け先住所１
-          destAddr2,                             // お届け先住所２
-          "",                                    // お届け先会社・部門名
-          destName,                              // お届け先名
-          "",                                    // お届け先名(カナ)
-          "様",                                  // 敬称
-          "",                                    // 品名コード1
-          DEFAULT_ITEM_NAME,                     // 品名1
-          "1",                                   // 出荷個数
-          r.memo || "",                          // 記事
-          CONSIGNOR.phone,                       // ご依頼主電話番号
-          CONSIGNOR.zip,                         // ご依頼主郵便番号
-          CONSIGNOR.addr,                        // ご依頼主住所
-          CONSIGNOR.name,                        // ご依頼主名
-          BILLING_CUSTOMER_CODE,                 // ご請求先顧客コード
-          FREIGHT_MGMT_NO                        // 運賃管理番号（01=発払い）
-        ];
-
-        lines.push(rowOut.map(csvEscape).join(","));
-      });
-
-      return lines.join("\r\n");
-    }
-
-    // ===== CSVユーティリティ =====
-    function csvEscape(v){
-      const s = v==null ? "" : String(v);
-      return /[",\r\n]/.test(s) ? '"' + s.replaceAll('"','""') + '"' : s;
-    }
-    function downloadText(filename, text){
-      const blob = new Blob([text], {type:"text/csv;charset=utf-8"});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = filename;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-    }
-
-    // ===== イベント =====
-    document.getElementById("csvBtn").addEventListener("click", () => {
-      // 既存（サーバー生成の全件CSV）
-      window.location = "/api/orders/csv";
-    });
-
-    document.getElementById("applyBulk").addEventListener("click", () => {
-      const val = document.getElementById("bulkMethod").value;
-      grid.forEach(g => { if (g.selected) g.method = val; });
-      // DOM反映
-      tbody.querySelectorAll(".row-method").forEach(sel=>{
-        const i = Number(sel.dataset.idx);
-        if (grid[i].selected) sel.value = val;
-      });
-    });
-
-    document.getElementById("selectedCsvBtn").addEventListener("click", () => {
-      const picked = grid.filter(g => g.selected);
-      if (picked.length === 0) {
-        alert("CSVに出力する注文を選択してください。");
+    // ===== CSV: 選択行のみ、選択項目のみ、行ごとの発送種別で出力 =====
+    async function downloadSelectedCsv() {
+      const selections = getSelections();
+      if (selections.length === 0) {
+        alert("CSVにする行をチェックしてください。");
         return;
       }
-      const csv = buildSelectedCsv(picked);
-      const ymd = new Date().toISOString().slice(0,10).replaceAll("-","");
-      downloadText(`orders_selected_${ymd}.csv`, csv);
-    });
+      const columns = getSelectedColumnIds();
+      if (columns.length === 0) {
+        alert("CSV項目を1つ以上選んでください。");
+        return;
+      }
 
-    checkAll.addEventListener("change", ()=>{
-      grid.forEach(g => g.selected = checkAll.checked);
-      tbody.querySelectorAll(".row-check").forEach((el,i)=> el.checked = grid[i].selected);
-      syncCheckAll();
-    });
-
-    function syncCheckAll(){
-      const total = grid.length;
-      const sel = grid.filter(g=>g.selected).length;
-      checkAll.checked = (sel===total && total>0);
-      checkAll.indeterminate = (sel>0 && sel<total);
+      try {
+        const res = await fetch('/api/orders/csv', {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify({ selections, columns })
+        });
+        if (!res.ok) {
+          const e = await res.json().catch(()=>({}));
+          throw new Error(e.detail || 'CSV生成に失敗しました');
+        }
+        // Blob受け取り → ダウンロード
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'orders_b2.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error(err);
+        alert('CSV作成中にエラー: ' + err.message);
+      }
     }
 
-    // ===== 初期ロード =====
-    await loadOrders();
+    document.getElementById("csvSelectedBtn").addEventListener("click", downloadSelectedCsv);
+
+    // 初期表示
+    (async ()=>{
+      try {
+        await loadCsvHeaders();
+        await loadOrders();
+      } catch (e) {
+        console.error("初期化エラー:", e);
+        alert("初期化中にエラーが発生しました。");
+      }
+    })();
   </script>
 </body>
 </html>
