@@ -5,44 +5,53 @@
   <title>nursery sera — 注文管理</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <style>
-    body{font-family:sans-serif;margin:40px;}
-  table{border-collapse:collapse;width:100%;}
-  th,td{border:1px solid #ccc;padding:10px 12px;text-align:left;vertical-align:top;}
-  th{background:#eee;font-size:16px;white-space:nowrap;word-break:keep-all;}
-  td{font-size:18px;line-height:1.25;}
+    /* ===== 表示を約50%に縮小（全体スケール） ===== */
+    html, body { height: 100%; }
+    body{
+      font-family:sans-serif;
+      margin:40px;
+      transform: scale(0.5);
+      transform-origin: top left;
+      width: 200%; /* 縮小で狭く見えないよう実効幅を補正 */
+    }
+
+    table{border-collapse:collapse;width:100%;}
+    th,td{border:1px solid #ccc;padding:10px 12px;text-align:left;vertical-align:top;}
+    th{background:#eee;font-size:16px;white-space:nowrap;word-break:keep-all;}
+    td{font-size:18px;line-height:1.25;}
 
     button{
-    margin:10px 0;padding:12px 16px;
-    font-size:18px;min-height:56px;cursor:pointer;
-    border-radius:10px;border:1px solid #bbb;background:#f7f7f7;
-  }
+      margin:10px 0;padding:12px 16px;
+      font-size:18px;min-height:56px;cursor:pointer;
+      border-radius:10px;border:1px solid #bbb;background:#f7f7f7;
+    }
 
-  /* 横文字・改行なし（ネコポス／宅急便ボタン用） */
-  .nowrap-btn {
-    white-space: nowrap;
-    word-break: keep-all;
-    writing-mode: horizontal-tb;
-  }
+    /* 横文字・改行なし（ネコポス／宅急便ボタン用） */
+    .nowrap-btn {
+      white-space: nowrap;
+      word-break: keep-all;
+      writing-mode: horizontal-tb;
+    }
 
-  .controls{
-    display:grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap:12px;
-    align-items:start;
-    margin:8px 0 16px;
-  }
-  .col{display:flex;flex-direction:column;gap:6px;}
+    .controls{
+      display:grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap:12px;
+      align-items:start;
+      margin:8px 0 16px;
+    }
+    .col{display:flex;flex-direction:column;gap:6px;}
 
-  .cols-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 14px;margin-top:8px;max-height:260px;overflow:auto;padding:8px;border:1px solid #ddd;border-radius:6px;background:#fafafa;}
-  .muted{color:#666;font-size:14px;white-space:pre-line;}
-  .ship-preview{font-weight:bold;}
+    .cols-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 14px;margin-top:8px;max-height:260px;overflow:auto;padding:8px;border:1px solid #ddd;border-radius:6px;background:#fafafa;}
+    .muted{color:#666;font-size:14px;white-space:pre-line;}
+    .ship-preview{font-weight:bold;}
 
-  input[type="text"]{padding:10px 12px;font-size:18px;border:1px solid #bbb;border-radius:10px;}
+    input[type="text"]{padding:10px 12px;font-size:18px;border:1px solid #bbb;border-radius:10px;}
 
-  .row-check{transform:scale(1.8);transform-origin:left top;margin:8px 0;}
+    .row-check{transform:scale(1.8);transform-origin:left top;margin:8px 0;}
 
-  .hline{display:inline-block;white-space:nowrap;word-break:keep-all;}
-  .center{text-align:center;}
+    .hline{display:inline-block;white-space:nowrap;word-break:keep-all;}
+    .center{text-align:center;}
   </style>
 </head>
 <body>
@@ -56,10 +65,11 @@
       <button id="csvAllBtn">allCSV</button>
     </div>
 
-   <div class="col">
-  <button id="toNekoposBtn" class="nowrap-btn">☑︎→ネコポス</button>
-  <button id="toHatsubaraiBtn" class="nowrap-btn">☑︎→宅急便</button>
-</div>
+    <!-- 中：☑︎→ネコポス / ☑︎→宅急便 -->
+    <div class="col">
+      <button id="toNekoposBtn" class="nowrap-btn">☑︎→ネコポス</button>
+      <button id="toHatsubaraiBtn" class="nowrap-btn">☑︎→宅急便</button>
+    </div>
 
     <!-- 右：2025 / 出荷予定日：［入力］ → 未設定 -->
     <div class="col">
@@ -82,20 +92,30 @@
   <table id="ordersTable">
     <thead>
       <tr>
-        <th>選択</th><th>発送種別</th><th>名前</th><th>住所</th><th>電話</th>
-        <th>配達希望日</th><th>配達希望時間</th><th>出荷予定日</th><th>登録日</th>
+        <!-- ご指定の順番：選択, 発送種別, 出荷予定日, 名前, 住所, 電話, 配達希望日, 配達希望時間, 登録日 -->
+        <th>選択</th>
+        <th>発送種別</th>
+        <th>出荷予定日</th>
+        <th>名前</th>
+        <th>住所</th>
+        <th>電話</th>
+        <th>配達希望日</th>
+        <th>配達希望時間</th>
+        <th>登録日</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
 
   <script type="module">
+    // ===== パスワードガード（既存） =====
     (function(){
       const pass = sessionStorage.getItem('admin-pass') || prompt('パスワードを入力してください');
       if (pass !== 'kohakurira') { alert('不正アクセス検知：トップページに戻ります'); location.href = '/'; }
       else { sessionStorage.setItem('admin-pass', pass); }
     })();
 
+    // ===== グローバル =====
     let ORDERS = [];
     let CSV_HEADERS = [];
     let shipYear = new Date().getFullYear();
@@ -104,6 +124,7 @@
     const esc = s => String(s??"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
     const onlyDigits = s => (s||"").replace(/\D/g,"");
 
+    // 5文字超のときのみ強制改行（横書き維持）
     function brIfLongEveryN(str, n=5){
       const s = String(str||"");
       if (!s) return "";
@@ -112,24 +133,28 @@
       for(let i=0;i<s.length;i+=n) parts.push(`<span class="hline">${esc(s.slice(i,i+n))}</span>`);
       return parts.join("<br>");
     }
+    // 名前：姓 ↵ 名
     function formatName(last, first){
       const l = (last||"").trim();
       const f = (first||"").trim();
       if (!l && !f) return "-";
       return `<span class="hline">${esc(l)}</span><br><span class="hline">${esc(f)}</span>`;
     }
+    // 住所
     function formatAddress(pref, city, addr, bld){
       return [pref, city, addr, bld]
         .map(part => part ? brIfLongEveryN(part, 5) : "")
         .filter(Boolean)
         .join("<br>");
     }
+    // 電話：3/4/4
     function formatPhone(phone){
       const d = onlyDigits(phone);
       if (!d) return "-";
       const a = d.slice(0,3), b = d.slice(3,7), c = d.slice(7,11);
       return [a,b,c].filter(Boolean).map(x=>`<span class="hline">${esc(x)}</span>`).join("<br>");
     }
+    // 日付：YYYY ↵ MM/DD
     function toYAndMdHtml(dateLike){
       if (!dateLike) return "-";
       const dt = new Date(dateLike);
@@ -139,12 +164,14 @@
       const d = String(dt.getDate()).padStart(2,"0");
       return `<span class="hline">${y}</span><br><span class="hline">${m}/${d}</span>`;
     }
+    // 時間帯：1820 → 18 ↵ 20
     function formatTimeSlotHtml(slot){
       if (!slot) return "-";
       const s = String(slot).replace(/\D/g,"");
       if (s.length===4) return `<span class="hline">${esc(s.slice(0,2))}</span><br><span class="hline">${esc(s.slice(2,4))}</span>`;
       return `<span class="hline">${esc(s)}</span>`;
     }
+    // MMDD -> YYYY/MM/DD
     function mmddToYmd(year, mmdd){
       const m = (mmdd || "").trim();
       if (!/^\d{4}$/.test(m)) return "";
@@ -157,6 +184,8 @@
       return `${y}/${M}/${D}`;
     }
     function getShipDateYmd(){ return mmddToYmd(shipYear, shipMmdd); }
+
+    // 出荷予定日の見た目更新（テーブル列）
     function refreshShipPreview(){
       document.getElementById('shipYearBtn').textContent = String(shipYear);
       const ymd = getShipDateYmd();
@@ -165,6 +194,7 @@
       document.querySelectorAll('td[data-col="ship"]').forEach(td=> td.innerHTML = html);
     }
 
+    // CSVヘッダ（既存）
     async function loadCsvHeaders() {
       const res = await fetch('/api/orders/csv/headers');
       if (!res.ok) throw new Error('CSVヘッダ取得に失敗');
@@ -183,6 +213,7 @@
       });
     }
 
+    // 注文データの描画（列順のみ変更）
     async function loadOrders(){
       const res = await fetch("/api/orders");
       if (!res.ok) throw new Error("データ取得に失敗しました");
@@ -201,21 +232,37 @@
         const createdHtml = row.created_at ? toYAndMdHtml(row.created_at) : "-";
 
         tr.innerHTML = `
+          <!-- 選択 -->
           <td class="center"><input type="checkbox" class="row-check" data-id="${row.id}"></td>
-          <td class="center"><span class="hline">${esc(row.id)}</span></td>
-          <td class="center">${nameHtml}</td>
-          <td>${addrHtml}</td>
-          <td class="center">${phoneHtml}</td>
-          <td class="center">${delivHtml}</td>
-          <td class="center">${timeHtml}</td>
-          <td class="center" data-col="ship">-</td>
-          <td class="center">${createdHtml}</td>
+
+          <!-- 発送種別（セレクトはそのまま） -->
           <td class="center">
             <select class="ship-type" data-id="${row.id}" style="font-size:18px;min-height:48px;">
               <option value="0">0</option>
               <option value="A">A</option>
             </select>
           </td>
+
+          <!-- 出荷予定日（プレビューは右上の設定に追随） -->
+          <td class="center" data-col="ship">-</td>
+
+          <!-- 名前 -->
+          <td class="center">${nameHtml}</td>
+
+          <!-- 住所 -->
+          <td>${addrHtml}</td>
+
+          <!-- 電話 -->
+          <td class="center">${phoneHtml}</td>
+
+          <!-- 配達希望日 -->
+          <td class="center">${delivHtml}</td>
+
+          <!-- 配達希望時間 -->
+          <td class="center">${timeHtml}</td>
+
+          <!-- 登録日 -->
+          <td class="center">${createdHtml}</td>
         `;
         tbody.appendChild(tr);
       });
@@ -223,6 +270,7 @@
       refreshShipPreview();
     }
 
+    // 変換ボタン
     function setSelectedShipType(to){
       const ids = new Set(
         Array.from(document.querySelectorAll('.row-check:checked')).map(cb => Number(cb.dataset.id))
@@ -236,6 +284,7 @@
     document.getElementById('toNekoposBtn').addEventListener('click', ()=> setSelectedShipType('A'));
     document.getElementById('toHatsubaraiBtn').addEventListener('click', ()=> setSelectedShipType('0'));
 
+    // 出荷予定日入力
     document.getElementById('shipYearBtn').addEventListener('click', ()=>{
       const y = prompt('出荷予定年を4桁で入力してください', String(shipYear));
       if (!y) return;
@@ -249,6 +298,7 @@
       refreshShipPreview();
     });
 
+    // CSV用ユーティリティ
     function getSelectedColumnIds() {
       return Array.from(document.querySelectorAll('#colsContainer input[type="checkbox"]:checked'))
         .map(cb => cb.dataset.id);
@@ -263,6 +313,8 @@
       });
       return Array.from(checkedIds).map(id => ({ id, slip_type: mapShip[id] || "0" }));
     }
+
+    // === バリデーション追加：出荷予定日未設定ならCSV出力不可 ===
     async function downloadSelectedCsv() {
       const selections = getSelections();
       if (selections.length === 0) { alert("CSVにする行をチェックしてください。"); return; }
@@ -270,6 +322,8 @@
       if (columns.length === 0) { alert("CSV項目を1つ以上選んでください。"); return; }
 
       const shipDate = getShipDateYmd();
+      if (!shipDate) { alert("出荷予定日を設定してください（年ボタン＋MMDD入力）。"); return; }
+
       try {
         const res = await fetch('/api/orders/csv', {
           method: 'POST',
@@ -293,8 +347,10 @@
     document.getElementById("csvSelectedBtn").addEventListener("click", downloadSelectedCsv);
 
     async function downloadAllCsv(){
-      const shipDate = encodeURIComponent(getShipDateYmd() || "");
-      const url = shipDate ? `/api/orders/csv?ship_date=${shipDate}` : `/api/orders/csv`;
+      const shipDate = getShipDateYmd();
+      if (!shipDate) { alert("出荷予定日を設定してください（年ボタン＋MMDD入力）。"); return; }
+
+      const url = `/api/orders/csv?ship_date=${encodeURIComponent(shipDate)}`;
       try{
         const res = await fetch(url);
         if (!res.ok) throw new Error('CSV生成に失敗しました');
@@ -310,6 +366,7 @@
     }
     document.getElementById('csvAllBtn').addEventListener('click', downloadAllCsv);
 
+    // 初期表示
     (async ()=>{
       try {
         await loadCsvHeaders();
