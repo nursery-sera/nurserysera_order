@@ -62,7 +62,7 @@
     <!-- 左：☑︎→CSV / allCSV -->
     <div class="col">
       <button id="csvSelectedBtn">☑︎→CSV</button>
-      <button id="csvAllBtn">allCSV</button>
+      <button id="csvAllBtn">一括CSV</button>
     </div>
 
     <!-- 中：☑︎→ネコポス / ☑︎→宅急便 -->
@@ -189,7 +189,7 @@
     function refreshShipPreview(){
       document.getElementById('shipYearBtn').textContent = String(shipYear);
       const ymd = getShipDateYmd();
-      document.getElementById('shipPreview').textContent = ymd || "未設定";
+      document.getElementById('shipPreview').textContent = ymd || "";
       const html = ymd ? `<span class="hline">${ymd.split("/")[0]}</span><br><span class="hline">${ymd.slice(5)}</span>` : "-";
       document.querySelectorAll('td[data-col="ship"]').forEach(td=> td.innerHTML = html);
     }
