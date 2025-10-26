@@ -1,5 +1,5 @@
 // ================================
-// server.js（修正版・完全版）
+// server.js（完全版・必須項目対応）
 // nursery sera — ご注文フォームAPI
 // ================================
 
@@ -10,7 +10,7 @@ import fs from "fs";
 import dotenv from "dotenv";
 import { createObjectCsvWriter } from "csv-writer";
 
-dotenv.config(); // ← .env を読み込み
+dotenv.config();
 
 const { Pool } = pkg;
 const app = express();
@@ -27,12 +27,12 @@ app.use(express.json());
 app.use(express.static("public"));
 app.use("/admin", express.static("admin"));
 
-// 空文字や未定義を NULL にするユーティリティ
+// 空文字をNULL化
 function nn(v) {
   return (v === undefined || v === null || String(v).trim() === "") ? null : v;
 }
 
-// === テーブル存在チェック＆作成 ===
+// === ordersテーブル作成 ===
 await pool.query(`
   CREATE TABLE IF NOT EXISTS orders (
     id SERIAL PRIMARY KEY,
@@ -53,15 +53,12 @@ await pool.query(`
   );
 `);
 
-// === 注文データ登録 ===
+// === 注文登録 ===
 app.post("/api/orders", async (req, res) => {
   try {
-    // index.html 側 payload 構造に準拠
     const c = req.body.customer || {};
     const d = req.body.delivery || {};
-
-    // delivery_date が '' のときは NULL にする（DATE 型対策）
-    const deliveryDate = nn(d.desired_date); // '' -> null
+    const deliveryDate = nn(d.desired_date);
     const timeSlot     = nn(d.desired_time);
 
     const q = `
@@ -71,23 +68,12 @@ app.post("/api/orders", async (req, res) => {
       )
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
     `;
-
     const v = [
-      nn(c.lastName),
-      nn(c.firstName),
-      nn(c.zipcode),
-      nn(c.prefecture),
-      nn(c.city),
-      nn(c.address),
-      nn(c.building),
-      nn(c.phone),
-      nn(c.email),
-      nn(c.instagram),
-      deliveryDate,        // ← NULL になり得る
-      timeSlot,            // ← NULL になり得る
-      nn(req.body.note),
+      nn(c.lastName), nn(c.firstName),
+      nn(c.zipcode), nn(c.prefecture), nn(c.city), nn(c.address), nn(c.building),
+      nn(c.phone), nn(c.email), nn(c.instagram),
+      deliveryDate, timeSlot, nn(req.body.note),
     ];
-
     await pool.query(q, v);
     res.json({ ok: true });
   } catch (e) {
@@ -96,12 +82,10 @@ app.post("/api/orders", async (req, res) => {
   }
 });
 
-// === 一覧表示 ===
+// === 一覧 ===
 app.get("/api/orders", async (req, res) => {
   try {
-    const result = await pool.query(
-      "SELECT * FROM orders ORDER BY created_at DESC"
-    );
+    const result = await pool.query("SELECT * FROM orders ORDER BY created_at DESC");
     res.json(result.rows);
   } catch (e) {
     console.error("一覧取得エラー:", e);
@@ -109,73 +93,65 @@ app.get("/api/orders", async (req, res) => {
   }
 });
 
-// === CSV出力（ヤマトB2クラウド形式） ===
+// === CSV出力（ヤマトB2クラウド：必須項目対応） ===
 app.get("/api/orders/csv", async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM orders ORDER BY created_at DESC");
     const rows = result.rows;
 
     const filePath = "./orders_b2.csv";
+
     const csvWriter = createObjectCsvWriter({
       path: filePath,
       header: [
         { id: "manage_no", title: "お客様管理番号" },
         { id: "slip_type", title: "送り状種類" },
-        { id: "cool_type", title: "クール区分" },
-        { id: "den_no", title: "伝票番号" },
         { id: "ship_date", title: "出荷予定日" },
-        { id: "delivery_date", title: "お届け予定日" },
-        { id: "time_slot", title: "お届け時間帯" },
         { id: "dest_phone", title: "お届け先電話番号" },
         { id: "dest_zip", title: "お届け先郵便番号" },
         { id: "dest_addr", title: "お届け先住所" },
-        { id: "dest_company", title: "お届け先会社・部門名" },
         { id: "dest_name", title: "お届け先名" },
-        { id: "dest_name_kana", title: "お届け先名(カナ)" },
-        { id: "title", title: "敬称" },
-        { id: "item_code1", title: "品名コード1" },
+        { id: "sender_phone", title: "ご依頼主電話番号" },
+        { id: "sender_zip", title: "ご依頼主郵便番号" },
+        { id: "sender_addr", title: "ご依頼主住所" },
+        { id: "sender_name", title: "ご依頼主名" },
         { id: "item_name1", title: "品名1" },
-        { id: "qty", title: "出荷個数" },
-        { id: "note", title: "記事" },
-        { id: "sender_phone", title: "発送元電話番号" },
-        { id: "sender_zip", title: "発送元郵便番号" },
-        { id: "sender_addr", title: "発送元住所" },
-        { id: "sender_name", title: "発送元名" },
+        { id: "bill_to_code", title: "請求先顧客コード" },
+        { id: "freight_mgmt", title: "運賃管理番号" },
       ],
     });
 
+    // === 発送元情報 ===
     const sender = {
-      phone: "09067309120",
-      zip: "5798023",
-      addr: "大阪府東大阪市立花町14-4",
-      name: "NURSERY SERA",
+      phone: process.env.SENDER_PHONE || "09067309120",
+      zip: process.env.SENDER_ZIP || "5798023",
+      addr: process.env.SENDER_ADDR || "大阪府東大阪市立花町14-4",
+      name: process.env.SENDER_NAME || "NURSERY SERA",
     };
+
+    // === 日付 ===
+    const today = new Date();
+    const shipDate = today.toISOString().split("T")[0].replace(/-/g, "/");
+
+    // === 請求情報 ===
+    const BILL_TO_CODE = process.env.BILL_TO_CODE || "9999999999";
+    const FREIGHT_MGMT = process.env.FREIGHT_MGMT || "30";
 
     const records = rows.map((r, i) => ({
       manage_no: String(i + 1).padStart(4, "0"),
-      slip_type: 0,
-      cool_type: 0,
-      den_no: "",
-      ship_date: "",
-      delivery_date: r.delivery_date
-        ? new Date(r.delivery_date).toLocaleDateString("ja-JP")
-        : "",
-      time_slot: r.time_slot,
-      dest_phone: r.phone,
-      dest_zip: r.zipcode,
-      dest_addr: `${r.prefecture}${r.city}${r.address}${r.building}`,
-      dest_company: "",
-      dest_name: `${r.last_name} ${r.first_name}`,
-      dest_name_kana: "",
-      title: "様",
-      item_code1: "",
-      item_name1: "フラワーギフト",
-      qty: 1,
-      note: r.memo || "",
+      slip_type: "0",
+      ship_date: shipDate,
+      dest_phone: r.phone || "",
+      dest_zip: (r.zipcode || "").replace(/\D/g, ""),
+      dest_addr: `${r.prefecture || ""}${r.city || ""}${r.address || ""}${r.building || ""}`,
+      dest_name: `${r.last_name || ""} ${r.first_name || ""}`.trim(),
       sender_phone: sender.phone,
       sender_zip: sender.zip,
       sender_addr: sender.addr,
       sender_name: sender.name,
+      item_name1: "フラワーギフト",
+      bill_to_code: BILL_TO_CODE,
+      freight_mgmt: FREIGHT_MGMT,
     }));
 
     await csvWriter.writeRecords(records);
