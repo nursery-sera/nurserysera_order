@@ -1,5 +1,5 @@
 // ================================
-// server.js（完全版・必須項目対応）
+// server.js（完全版・必須項目対応 + 発払い/ネコポス切替）
 // nursery sera — ご注文フォームAPI
 // ================================
 
@@ -93,9 +93,10 @@ app.get("/api/orders", async (req, res) => {
   }
 });
 
-// === CSV出力（ヤマトB2クラウド：必須項目対応） ===
+// === CSV出力（ヤマトB2クラウド形式） ===
 app.get("/api/orders/csv", async (req, res) => {
   try {
+    const type = req.query.type || "0"; // 0: 発払い, A: ネコポス
     const result = await pool.query("SELECT * FROM orders ORDER BY created_at DESC");
     const rows = result.rows;
 
@@ -123,23 +124,22 @@ app.get("/api/orders/csv", async (req, res) => {
 
     // === 発送元情報 ===
     const sender = {
-      phone: process.env.SENDER_PHONE || "09067309120",
-      zip: process.env.SENDER_ZIP || "5798023",
-      addr: process.env.SENDER_ADDR || "大阪府東大阪市立花町14-4",
-      name: process.env.SENDER_NAME || "NURSERY SERA",
+      phone: "09067309120",
+      zip: "5798023",
+      addr: "大阪府東大阪市立花町14-4",
+      name: "NURSERY SERA",
     };
 
-    // === 日付 ===
-    const today = new Date();
-    const shipDate = today.toISOString().split("T")[0].replace(/-/g, "/");
+    // === 固定請求情報 ===
+    const BILL_TO_CODE = "09067309120";
+    const FREIGHT_MGMT = "01";
 
-    // === 請求情報 ===
-    const BILL_TO_CODE = process.env.BILL_TO_CODE || "9999999999";
-    const FREIGHT_MGMT = process.env.FREIGHT_MGMT || "30";
+    // === 出荷予定日 ===
+    const shipDate = new Date().toISOString().split("T")[0].replace(/-/g, "/");
 
     const records = rows.map((r, i) => ({
       manage_no: String(i + 1).padStart(4, "0"),
-      slip_type: "0",
+      slip_type: type, // 管理画面で選択した値 ("0" or "A")
       ship_date: shipDate,
       dest_phone: r.phone || "",
       dest_zip: (r.zipcode || "").replace(/\D/g, ""),
