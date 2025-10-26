@@ -1,3 +1,7 @@
+
+管理画面
+
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -8,20 +12,12 @@
     table{border-collapse:collapse;width:100%;}
     th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;font-size:14px;}
     th{background:#eee;}
-    button, select{margin:10px 5px;padding:6px 14px;font-size:14px;cursor:pointer;}
+    button{margin:10px 0;padding:6px 14px;font-size:14px;cursor:pointer;}
   </style>
 </head>
 <body>
   <h1>注文データ一覧</h1>
-
-  <label for="shipType">配送方法：</label>
-  <select id="shipType">
-    <option value="0">宅急便（発払い）</option>
-    <option value="A">ネコポス</option>
-  </select>
-
   <button id="csvBtn">CSVダウンロード</button>
-
   <table id="ordersTable">
     <thead>
       <tr>
@@ -32,11 +28,11 @@
   </table>
 
   <script type="module">
-    // ===== パスワード保護 =====
+    // ===== パスワードガード（Firebase管理ページと同方式） =====
     (function(){
       const pass = sessionStorage.getItem('admin-pass') || prompt('パスワードを入力してください');
       if (pass !== 'kohakurira') {
-        alert('アクセス拒否：トップページに戻ります');
+        alert('不正アクセス検知：トップページに戻ります');
         location.href = '/';
       } else {
         sessionStorage.setItem('admin-pass', pass);
@@ -47,7 +43,9 @@
     async function loadOrders(){
       try {
         const res = await fetch("/api/orders");
-        if (!res.ok) throw new Error("データ取得失敗");
+        if (!res.ok) {
+          throw new Error("データ取得に失敗しました");
+        }
         const data = await res.json();
         const tbody = document.querySelector("#ordersTable tbody");
         tbody.innerHTML = "";
@@ -64,18 +62,17 @@
           tbody.appendChild(tr);
         });
       } catch (err) {
-        console.error(err);
+        console.error("読み込みエラー:", err);
         alert("データの読み込み中にエラーが発生しました。");
       }
     }
 
-    // ===== CSVダウンロード =====
+    // ===== CSVボタン =====
     document.getElementById("csvBtn").addEventListener("click", ()=>{
-      const shipType = document.getElementById("shipType").value;
-      window.location = `/api/orders/csv?type=${shipType}`;
+      window.location = "/api/orders/csv";
     });
 
-    // ===== ページ読み込み時 =====
+    // ===== ページ読み込み時に実行 =====
     loadOrders();
   </script>
 </body>
