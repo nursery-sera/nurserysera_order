@@ -29,18 +29,10 @@ app.use("/admin", express.static("admin"));
 
 // 空文字をNULL化
 function nn(v) {
-  // nn(v)はそのまま使用しますが、今回は必須項目のみを埋めるため、
-  // この関数の利用は注文登録時の必須項目に限定されると解釈します。
-  // ただし、必須ではない項目もDBへのINSERT処理の都合上、
-  // `nn(req.body.note)` のように呼び出す必要があります。
   return (v === undefined || v === null || String(v).trim() === "") ? null : v;
 }
 
 // === ordersテーブル作成 ===
-// 必須項目のみをテーブル定義に残し、その他は削除または空で作成し直します。
-// ただし、既存コードの orders テーブル定義を維持し、
-// 必須ではない項目にはデータが格納されない（NULL）ことを保証する方針とします。
-// 以下のテーブル定義は元のコードを維持します。
 await pool.query(`
   CREATE TABLE IF NOT EXISTS orders (
     id SERIAL PRIMARY KEY,
@@ -65,19 +57,14 @@ await pool.query(`
 app.post("/api/orders", async (req, res) => {
   try {
     const c = req.body.customer || {};
-    const d = req.body.delivery || {};
-    
-    // 必須項目のみを埋め、必須ではない項目は空（null）にします。
-    // * 顧客情報: lastName, firstName, zipcode, prefecture, city, address, phone, email は**必須項目**と仮定
-    // * 配送情報: desired_date, desired_time は**必須ではない**と仮定
-    // * その他: building, instagram, note は**必須ではない**と仮定
-    
-    // 必須ではない項目は全て `null` で登録
-    const building = null;    // 必須ではない
-    const instagram = null;   // 必須ではない
-    const deliveryDate = null; // 必須ではない (nn(d.desired_date) の代わりに null)
-    const timeSlot = null;     // 必須ではない (nn(d.desired_time) の代わりに null)
-    const memo = null;         // 必須ではない (nn(req.body.note) の代わりに null)
+    // const d = req.body.delivery || {}; // 今回は配送希望日は必須ではないとして null 固定
+
+    // 必須ではない項目は全て `null` で登録 (CSV出力時に空文字 "" にする)
+    const building = null;    
+    const instagram = null;   
+    const deliveryDate = null; 
+    const timeSlot = null;     
+    const memo = null;         
 
     const q = `
       INSERT INTO orders (
@@ -88,9 +75,9 @@ app.post("/api/orders", async (req, res) => {
     `;
     const v = [
       nn(c.lastName), nn(c.firstName),
-      nn(c.zipcode), nn(c.prefecture), nn(c.city), nn(c.address), building,
-      nn(c.phone), nn(c.email), instagram,
-      deliveryDate, timeSlot, memo,
+      nn(c.zipcode), nn(c.prefecture), nn(c.city), nn(c.address), building, // building: null
+      nn(c.phone), nn(c.email), instagram, // instagram: null
+      deliveryDate, timeSlot, memo, // deliveryDate, timeSlot, memo: null
     ];
     await pool.query(q, v);
     res.json({ ok: true });
@@ -101,7 +88,6 @@ app.post("/api/orders", async (req, res) => {
 });
 
 // === 一覧 ===
-// 一覧取得APIはそのまま維持
 app.get("/api/orders", async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM orders ORDER BY created_at DESC");
@@ -112,33 +98,57 @@ app.get("/api/orders", async (req, res) => {
   }
 });
 
-// === CSV出力（ヤマトB2クラウド形式） ===
-// CSV出力APIは、必須ではない項目が空であることを考慮しつつ、元のロジックを維持
+// === CSV出力（ヤマトB2クラウド「外部データ取り込み基本レイアウト」形式） ===
 app.get("/api/orders/csv", async (req, res) => {
   try {
     const type = req.query.type || "0"; // 0: 発払い, A: ネコポス
     const result = await pool.query("SELECT * FROM orders ORDER BY created_at DESC");
     const rows = result.rows;
 
-    const filePath = "./orders_b2.csv";
+    const filePath = "./orders_b2_new.csv";
 
+    // 🏆 ヤマトB2クラウド「外部データ取り込み基本レイアウト」のヘッダーに合わせる 🏆
     const csvWriter = createObjectCsvWriter({
       path: filePath,
       header: [
         { id: "manage_no", title: "お客様管理番号" },
         { id: "slip_type", title: "送り状種類" },
         { id: "ship_date", title: "出荷予定日" },
+        { id: "delivery_type", title: "お届け先コード" },
         { id: "dest_phone", title: "お届け先電話番号" },
         { id: "dest_zip", title: "お届け先郵便番号" },
         { id: "dest_addr", title: "お届け先住所" },
         { id: "dest_name", title: "お届け先名" },
+        { id: "dest_kana", title: "お届け先名(カナ)" },
         { id: "sender_phone", title: "ご依頼主電話番号" },
         { id: "sender_zip", title: "ご依頼主郵便番号" },
         { id: "sender_addr", title: "ご依頼主住所" },
         { id: "sender_name", title: "ご依頼主名" },
+        { id: "sender_kana", title: "ご依頼主名(カナ)" },
         { id: "item_name1", title: "品名1" },
+        { id: "item_name2", title: "品名2" },
+        { id: "item_name_kana", title: "品名カナ" },
+        { id: "item_pieces", title: "個数" },
+        { id: "item_size", title: "サイズ" },
+        { id: "item_weight", title: "重量" },
+        { id: "delivery_date", title: "お届け予定日" },
+        { id: "time_slot", title: "お届け時間帯" },
+        { id: "payment_type", title: "請求区分" },
         { id: "bill_to_code", title: "請求先顧客コード" },
         { id: "freight_mgmt", title: "運賃管理番号" },
+        { id: "daibiki_amount", title: "代金引換額" },
+        { id: "daibiki_tax", title: "代金引換消費税" },
+        { id: "payment_method", title: "決済方法" },
+        { id: "memo", title: "備考" },
+        { id: "handling_type", title: "取扱区分" },
+        { id: "cust_shipping_mgmt", title: "お客様出荷管理番号" },
+        { id: "search_key1_title", title: "検索キータイトル1" },
+        { id: "search_key1", title: "検索キー1" },
+        { id: "search_key2_title", title: "検索キータイトル2" },
+        { id: "search_key2", title: "検索キー2" },
+        { id: "multi_key", title: "複数口くくりキー" },
+        { id: "mail_type", title: "メール便区分" },
+        { id: "gift_type", title: "ギフト指定" },
       ],
     });
 
@@ -151,6 +161,7 @@ app.get("/api/orders/csv", async (req, res) => {
     };
 
     // === 固定請求情報 ===
+    const PAYMENT_TYPE = "1";     // 請求区分: 1=発払い, 2=着払い, 3=コレクト (今回は発払いを想定)
     const BILL_TO_CODE = "09067309120";
     const FREIGHT_MGMT = "01";
 
@@ -158,13 +169,13 @@ app.get("/api/orders/csv", async (req, res) => {
     const shipDate = new Date().toISOString().split("T")[0].replace(/-/g, "/");
 
     const records = rows.map((r, i) => ({
+      // --- 必須項目 (DBデータまたは固定値を使用) ---
       manage_no: String(i + 1).padStart(4, "0"),
-      slip_type: type, // 管理画面で選択した値 ("0" or "A")
+      slip_type: type, 
       ship_date: shipDate,
-      // 必須項目はデータが入っている前提
       dest_phone: r.phone || "",
       dest_zip: (r.zipcode || "").replace(/\D/g, ""),
-      // buildingは空になる（""）
+      // buildingがDBでNULL/空の場合も考慮し結合
       dest_addr: `${r.prefecture || ""}${r.city || ""}${r.address || ""}${r.building || ""}`,
       dest_name: `${r.last_name || ""} ${r.first_name || ""}`.trim(),
       sender_phone: sender.phone,
@@ -172,12 +183,39 @@ app.get("/api/orders/csv", async (req, res) => {
       sender_addr: sender.addr,
       sender_name: sender.name,
       item_name1: "フラワーギフト",
+      // DBの値がNULLの場合も空文字にする
+      delivery_date: r.delivery_date ? r.delivery_date.toISOString().split("T")[0].replace(/-/g, "/") : "", 
+      time_slot: r.time_slot || "", 
+      payment_type: PAYMENT_TYPE, 
       bill_to_code: BILL_TO_CODE,
       freight_mgmt: FREIGHT_MGMT,
+      memo: r.memo || "", 
+
+      // --- 必須ではない項目 (すべて空文字 "" を設定) ---
+      delivery_type: "",         
+      dest_kana: "",             
+      sender_kana: "",           
+      item_name2: "",            
+      item_name_kana: "",        
+      item_pieces: "",           
+      item_size: "",             
+      item_weight: "",           
+      daibiki_amount: "",        
+      daibiki_tax: "",           
+      payment_method: "",        
+      handling_type: "",         
+      cust_shipping_mgmt: "",    
+      search_key1_title: "",     
+      search_key1: "",           
+      search_key2_title: "",     
+      search_key2: "",           
+      multi_key: "",             
+      mail_type: "",             
+      gift_type: "",             
     }));
 
     await csvWriter.writeRecords(records);
-    res.download(filePath, "orders_b2.csv");
+    res.download(filePath, "orders_b2_new.csv");
   } catch (e) {
     console.error("CSV出力エラー:", e);
     res.status(500).json({ error: "CSV出力エラー", detail: e.message });
