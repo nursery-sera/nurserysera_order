@@ -134,6 +134,9 @@
       font-size:24px;background:#fff;border:2px solid #ddd;padding:12px 20px;cursor:pointer;border-radius:8px
     }
     .no-scroll{overflow:hidden}
+
+    /* ---- 追加：時間帯 select のプレースホルダー風表示用 ---- */
+    #timeSlot.hinting{color:#999;}
   </style>
 </head>
 <body>
@@ -254,6 +257,61 @@
     }
     bindHasValue(document.getElementById('timeSlot'));
     bindHasValue(document.getElementById('deliveryDate'));
+  })();
+
+  /* ==== 「ご希望配達時間」：タップ時だけプレースホルダー風に表示 → 選択で自動消去 ==== */
+  (function(){
+    const sel = document.getElementById('timeSlot');
+    if(!sel) return;
+
+    const HINT_VALUE = '__NEKO_HINT__';
+    const HINT_TEXT  = 'ネコポスでは配達時間のご指定はできません';
+
+    function ensureHintOption(){
+      let opt = sel.querySelector('option[data-hint="1"]');
+      if(!opt){
+        opt = document.createElement('option');
+        opt.value = HINT_VALUE;
+        opt.textContent = HINT_TEXT;
+        opt.dataset.hint = '1';
+        opt.disabled = true;
+      }
+      return opt;
+    }
+
+    sel.addEventListener('focus', ()=>{
+      // まだ何も選ばれていない時だけ、最上段に一時的に挿入して選択状態にする
+      if (!sel.value){
+        const hint = ensureHintOption();
+        if (!hint.parentNode){
+          sel.insertBefore(hint, sel.firstChild);
+        }
+        sel.value = HINT_VALUE;
+        sel.classList.add('hinting');
+      }
+    });
+
+    sel.addEventListener('change', ()=>{
+      // ヒント以外を選んだらヒント項目を削除して通常表示へ
+      if (sel.value !== HINT_VALUE){
+        const hint = sel.querySelector('option[data-hint="1"]');
+        if (hint) hint.remove();
+        sel.classList.remove('hinting');
+        // 値が入ったのでラベルを浮かせる（既存仕様と揃える）
+        sel.classList.add('has-value');
+      }
+    });
+
+    sel.addEventListener('blur', ()=>{
+      // 何も選ばずフォーカスが外れたらヒントを消して未選択へ戻す
+      if (sel.value === HINT_VALUE){
+        const hint = sel.querySelector('option[data-hint="1"]');
+        if (hint) hint.remove();
+        sel.value = '';
+        sel.classList.remove('hinting');
+        sel.classList.remove('has-value');
+      }
+    });
   })();
 
   /* ==== お届け希望日：min=3日後, max=14日後 + ブラックアウト ==== */
