@@ -75,14 +75,14 @@
     <div class="col">
       <button id="shipYearBtn" title="クリックで年を変更">2025</button>
       <div>
-        <label>出荷予定日：<input type="text" id="shipMmdd" placeholder="例: 1225" maxlength="4" inputmode="numeric" pattern="[0-9]*"></label>
-        <span>→ <span id="shipPreview" class="ship-preview">未設定</span></span>
+        <label>出荷予定日：<input type="text" id="shipMmdd" placeholder="例: 12月25日→1225" maxlength="4" inputmode="numeric" pattern="[0-9]*"></label>
+        <span> <span id="shipPreview" class="ship-preview"></span></span>
       </div>
     </div>
   </div>
 
   <details id="colPicker">
-    <summary>CSVに含める項目を選ぶ（サーバー定義と完全一致）</summary>
+    <summary>CSVに含める項目を選ぶ</summary>
     <div id="colsContainer" class="cols-list"></div>
     <label style="display:block;margin-top:8px;">
       <input type="checkbox" id="checkAllCols"> すべて選択 / 解除
