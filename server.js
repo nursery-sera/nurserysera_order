@@ -24,7 +24,7 @@ const PORT = process.env.PORT || 3000;
 // === 固定値 ===
 const BILLING_CUSTOMER_CODE = "09067309120";
 const FREIGHT_MANAGEMENT_NO = "01";          // 発払いの運賃管理番号（固定）
-const DEFAULT_ITEM_NAME = "観葉植物";
+const DEFAULT_ITEM_NAME = "植物";
 
 const CONSIGNOR = {
   phone: "09067309120",
